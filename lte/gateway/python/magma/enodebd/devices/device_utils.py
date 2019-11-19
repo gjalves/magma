@@ -22,6 +22,7 @@ class EnodebDeviceName():
     BAICELLS_QAFA = 'Baicells QAFA'
     BAICELLS_QAFB = 'Baicells QAFB'
     CAVIUM = 'Cavium'
+    MIKROTIK_INTERCELL_10 = 'Mikrotik Intercell 10'
 
 
 def get_device_name(
@@ -65,6 +66,8 @@ def get_device_name(
                                          % (device_oui, sw_version))
     elif device_oui in {'000FB7', }:
         return EnodebDeviceName.CAVIUM
+    elif device_oui in {'888888', }:
+        return EnodebDeviceName.MIKROTIK_INTERCELL_10
     else:
         raise UnrecognizedEnodebError("Device %s unsupported" % device_oui)
 

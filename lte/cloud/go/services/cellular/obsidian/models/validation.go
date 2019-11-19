@@ -201,6 +201,7 @@ func (config *NetworkEnodebConfigs) ValidateEnodebConfig() error {
 		"Baicells Nova-243 OD TDD",
 		"Baicells Neutrino 224 ID FDD",
 		"Baicells ID TDD/FDD",
+        "Mikrotik Intercell 10",
 		"NuRAN Cavium OC-LTE":
 		break
 	default:

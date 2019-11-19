@@ -270,6 +270,7 @@ definitions:
         - 'Baicells Nova-243 OD TDD'
         - 'Baicells Neutrino 224 ID FDD'
         - 'Baicells ID TDD/FDD'
+        - 'Mikrotik Intercell 10'
         - 'NuRAN Cavium OC-LTE'
   network_cellular_configs:
     description: Cellular configuration for a network
