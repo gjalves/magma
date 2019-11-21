@@ -338,18 +338,23 @@ class MikrotikIntercell10TrDataModel(DataModel):
     }
 
     NUM_PLMNS_IN_CONFIG = 6
-    TRANSFORMS_FOR_ENB = {
-        ParameterName.CELL_BARRED: transform_for_enb.invert_cell_barred,
-    }
     for i in range(1, NUM_PLMNS_IN_CONFIG + 1):
-        TRANSFORMS_FOR_ENB[ParameterName.PLMN_N_CELL_RESERVED % i] = transform_for_enb.cell_reserved
-        PARAMETERS[ParameterName.PLMN_N % i] = TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNList.%d.' % i, True, TrParameterType.STRING, False)
-        PARAMETERS[ParameterName.PLMN_N_CELL_RESERVED % i] = TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNList.%d.CellReservedForOperatorUse' % i, True, TrParameterType.STRING, False)
-        PARAMETERS[ParameterName.PLMN_N_ENABLE % i] = TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNList.%d.Enable' % i, True, TrParameterType.BOOLEAN, False)
-        PARAMETERS[ParameterName.PLMN_N_PRIMARY % i] = TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNList.%d.IsPrimary' % i, True, TrParameterType.BOOLEAN, False)
-        PARAMETERS[ParameterName.PLMN_N_PLMNID % i] = TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNList.%d.PLMNID' % i, True, TrParameterType.STRING, False)
+        PARAMETERS[ParameterName.PLMN_N % i] = TrParam(
+            FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNList.%d.' % i, True, TrParameterType.OBJECT, False)
+        PARAMETERS[ParameterName.PLMN_N_CELL_RESERVED % i] = TrParam(
+            FAPSERVICE_PATH
+            + 'CellConfig.LTE.EPC.PLMNList.%d.CellReservedForOperatorUse' % i, True, TrParameterType.UNSIGNED_INT, False)
+        PARAMETERS[ParameterName.PLMN_N_ENABLE % i] = TrParam(
+            FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNList.%d.Enable' % i, True, TrParameterType.UNSIGNED_INT, False)
+        PARAMETERS[ParameterName.PLMN_N_PRIMARY % i] = TrParam(
+            FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNList.%d.IsPrimary' % i, True, TrParameterType.UNSIGNED_INT, False)
+        PARAMETERS[ParameterName.PLMN_N_PLMNID % i] = TrParam(
+            FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNList.%d.PLMNID' % i, True, TrParameterType.UNSIGNED_INT, False)
 
-    TRANSFORMS_FOR_ENB[ParameterName.ADMIN_STATE] = transform_for_enb.admin_state
+    TRANSFORMS_FOR_ENB = {
+        ParameterName.DL_BANDWIDTH: transform_for_enb.bandwidth,
+        ParameterName.UL_BANDWIDTH: transform_for_enb.bandwidth
+    }
     TRANSFORMS_FOR_MAGMA = {
         ParameterName.DL_BANDWIDTH: transform_for_magma.bandwidth,
         ParameterName.UL_BANDWIDTH: transform_for_magma.bandwidth,
@@ -377,7 +382,7 @@ class MikrotikIntercell10TrDataModel(DataModel):
         """
         Load all the parameters instead of a subset.
         """
-        return list(cls.PARAMETERS.keys())
+        return [ParameterName.DEVICE]
 
     @classmethod
     def get_num_plmns(cls) -> int:
