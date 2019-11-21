@@ -102,8 +102,7 @@ class MikrotikIntercell10TrDataModel(DataModel):
     Class to represent relevant data model parameters from TR-196/TR-098.
     This class is effectively read-only.
 
-    This model specifically targets Qualcomm-based BaiCells units running
-    QAFA firmware.
+    This model specifically targets Mikrotik Intercell 10 units.
 
     These models have these idiosyncrasies (on account of running TR098):
 
@@ -122,7 +121,8 @@ class MikrotikIntercell10TrDataModel(DataModel):
     - Num PLMNs is not reported by these units
     """
     # Mapping of TR parameter paths to aliases
-    DEVICE_PATH = 'InternetGatewayDevice.'
+    DEVICE_PATH = 'Device.'
+    FAP_PATH = DEVICE_PATH + 'FAP.'
     FAPSERVICE_PATH = DEVICE_PATH + 'Services.FAPService.1.'
     EEPROM_PATH = 'boardconf.status.eepromInfo.'
     PARAMETERS = {
@@ -130,23 +130,23 @@ class MikrotikIntercell10TrDataModel(DataModel):
         ParameterName.DEVICE: TrParam(DEVICE_PATH, True, TrParameterType.OBJECT, False),
         ParameterName.FAP_SERVICE: TrParam(FAPSERVICE_PATH, True, TrParameterType.OBJECT, False),
 
-        # Qualcomm units do not expose MME_Status (We assume that the eNB is broadcasting state is connected to the MME)
+        # General information
         ParameterName.MME_STATUS: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.OpState', True, TrParameterType.BOOLEAN, False),
-        ParameterName.GPS_LAT: TrParam(DEVICE_PATH + 'FAP.GPS.latitude', True, TrParameterType.STRING, False),
-        ParameterName.GPS_LONG: TrParam(DEVICE_PATH + 'FAP.GPS.longitude', True, TrParameterType.STRING, False),
+        ParameterName.GPS_LAT: TrParam(FAP_PATH + 'GPS.ContinuousGPSStatus.Latitude', True, TrParameterType.STRING, False),
+        ParameterName.GPS_LONG: TrParam(FAP_PATH + 'GPS.ContinuousGPSStatus.Longitude', True, TrParameterType.STRING, False),
         ParameterName.SW_VERSION: TrParam(DEVICE_PATH + 'DeviceInfo.SoftwareVersion', True, TrParameterType.STRING, False),
-        ParameterName.SERIAL_NUMBER: TrParam(DEVICE_PATH + 'DeviceInfo.SerialNumber', True, TrParameterType.STRING, False),
+        ParameterName.SERIAL_NUMBER: TrParam(DEVICE_PATH + 'DeviceInfo.SerialNumber', True, TrParameterType.STRING, False), # Missing
 
         # Capabilities
-        ParameterName.DUPLEX_MODE_CAPABILITY: TrParam(EEPROM_PATH + 'div_multiple', True, TrParameterType.STRING, False),
-        ParameterName.BAND_CAPABILITY: TrParam(EEPROM_PATH + 'work_mode', True, TrParameterType.STRING, False),
+        ParameterName.DUPLEX_MODE_CAPABILITY: TrParam(EEPROM_PATH + 'div_multiple', True, TrParameterType.STRING, False), # Missing
+        ParameterName.BAND_CAPABILITY: TrParam(EEPROM_PATH + 'work_mode', True, TrParameterType.STRING, False), # Missing
 
         # RF-related parameters
-        ParameterName.EARFCNDL: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.EARFCNDL', True, TrParameterType.INT, False),
-        ParameterName.PCI: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.PhyCellID', True, TrParameterType.INT, False),
-        ParameterName.DL_BANDWIDTH: TrParam(DEVICE_PATH + 'Services.RfConfig.1.RfCarrierCommon.carrierBwMhz', True, TrParameterType.INT, False),
-        ParameterName.SUBFRAME_ASSIGNMENT: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.PHY.TDDFrame.SubFrameAssignment', True, 'bool', False),
-        ParameterName.SPECIAL_SUBFRAME_PATTERN: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.PHY.TDDFrame.SpecialSubframePatterns', True, TrParameterType.INT, False),
+        ParameterName.EARFCNDL: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.EARFCNDL', True, TrParameterType.INT, False), # Missing
+        ParameterName.PCI: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.PhyCellID', True, TrParameterType.INT, False), # Missing
+        ParameterName.DL_BANDWIDTH: TrParam(DEVICE_PATH + 'Services.RfConfig.1.RfCarrierCommon.carrierBwMhz', True, TrParameterType.INT, False), # Missing
+        ParameterName.SUBFRAME_ASSIGNMENT: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.PHY.TDDFrame.SubFrameAssignment', True, 'bool', False), # Missing
+        ParameterName.SPECIAL_SUBFRAME_PATTERN: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.PHY.TDDFrame.SpecialSubframePatterns', True, TrParameterType.INT, False), # Missing
         ParameterName.CELL_ID: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.Common.CellIdentity', True, TrParameterType.UNSIGNED_INT, False),
 
         # Other LTE parameters
@@ -155,16 +155,16 @@ class MikrotikIntercell10TrDataModel(DataModel):
         ParameterName.RF_TX_STATUS: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.OpState', True, TrParameterType.BOOLEAN, False),
 
         # Core network parameters
-        ParameterName.MME_IP: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.Gateway.S1SigLinkServerList', True, TrParameterType.STRING, False),
-        ParameterName.MME_PORT: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.Gateway.S1SigLinkPort', True, TrParameterType.INT, False),
+        ParameterName.MME_IP: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.Gateway.S1SigLinkServerList', True, TrParameterType.STRING, False), # Missing
+        ParameterName.MME_PORT: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.Gateway.S1SigLinkPort', True, TrParameterType.INT, False), # Missing
         # This parameter is standard but doesn't exist
         # ParameterName.NUM_PLMNS: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNListNumberOfEntries', True, TrParameterType.INT, False),
-        ParameterName.TAC: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.TAC', True, TrParameterType.INT, False),
-        ParameterName.IP_SEC_ENABLE: TrParam('boardconf.ipsec.ipsecConfig.onBoot', False, TrParameterType.BOOLEAN, False),
+        ParameterName.TAC: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.TAC', True, TrParameterType.INT, False), # Missing
+        ParameterName.IP_SEC_ENABLE: TrParam('boardconf.ipsec.ipsecConfig.onBoot', False, TrParameterType.BOOLEAN, False), # Missing
 
         # Management server parameters
-        ParameterName.PERIODIC_INFORM_ENABLE: TrParam(DEVICE_PATH + 'ManagementServer.PeriodicInformEnable', False, TrParameterType.BOOLEAN, False),
-        ParameterName.PERIODIC_INFORM_INTERVAL: TrParam(DEVICE_PATH + 'ManagementServer.PeriodicInformInterval', False, TrParameterType.INT, False),
+        ParameterName.PERIODIC_INFORM_ENABLE: TrParam(DEVICE_PATH + 'ManagementServer.PeriodicInformEnable', False, TrParameterType.BOOLEAN, False), # Missing
+        ParameterName.PERIODIC_INFORM_INTERVAL: TrParam(DEVICE_PATH + 'ManagementServer.PeriodicInformInterval', False, TrParameterType.INT, False), # Missing
 
         # Performance management parameters
         ParameterName.PERF_MGMT_ENABLE: TrParam(DEVICE_PATH + 'FAP.PerfMgmt.Config.Enable', False, TrParameterType.BOOLEAN, False),
