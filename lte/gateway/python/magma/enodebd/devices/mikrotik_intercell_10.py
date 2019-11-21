@@ -66,7 +66,7 @@ class MikrotikIntercell10Handler(BasicEnodebAcsStateMachine):
             # These states are only entered through manual user intervention
             'reboot': MikrotikIntercell10SendRebootState(self, when_done='wait_reboot'),
             'wait_reboot': WaitRebootResponseState(self, when_done='wait_post_reboot_inform'),
-            'wait_post_reboot_inform': WaitInformMRebootState(self, when_done='wait_empty', when_timeout='wait_inform'),
+            'wait_post_reboot_inform': WaitInformMRebootState(self, when_done='wait_reboot_delay', when_timeout='wait_inform'),
             # The states below are entered when an unexpected message type is
             # received
             'unexpected_fault': ErrorState(self)
@@ -96,57 +96,193 @@ class MikrotikIntercell10Handler(BasicEnodebAcsStateMachine):
     def unexpected_fault_state_name(self) -> str:
         return 'unexpected_fault'
 
+class MikrotikIntercell10GetObjectParametersState(EnodebAcsState):
+    """
+    When booted, the PLMN list is empty so we cannot get individual
+    object parameters. Instead, get the parent object PLMN_LIST
+    which will include any children if they exist.
+    """
+    def __init__(self, acs: EnodebAcsStateMachine, when_done: str):
+        super().__init__()
+        self.acs = acs
+        self.done_transition = when_done
+
+    def get_msg(self) -> AcsMsgAndTransition:
+        """ Respond with GetParameterValuesRequest """
+        names = [ParameterName.PLMN_LIST]
+
+        # Generate the request
+        request = models.GetParameterValues()
+        request.ParameterNames = models.ParameterNames()
+        request.ParameterNames.arrayType = 'xsd:string[%d]' \
+                                           % len(names)
+        request.ParameterNames.string = []
+        for name in names:
+            path = self.acs.data_model.get_parameter(name).path
+            request.ParameterNames.string.append(path)
+
+        return AcsMsgAndTransition(request, self.done_transition)
+
+    @classmethod
+    def state_description(cls) -> str:
+        return 'Getting object parameters'
+
+
+class MikrotikIntercell10WaitGetObjectParametersState(WaitGetObjectParametersState):
+    def __init__(
+        self,
+        acs: EnodebAcsStateMachine,
+        when_edit: str,
+        when_skip: str,
+    ):
+        super().__init__(acs=acs,
+                         when_add=when_edit,
+                         when_delete=when_edit,
+                         when_set=when_edit,
+                         when_skip=when_skip)
+
+
+class MikrotikIntercell10DisableAdminEnableState(EnodebAcsState):
+    """
+    Mikrotik Intercell 10 requires that we disable 'Admin Enable' before configuring
+    most parameters
+    """
+    def __init__(self, acs: EnodebAcsStateMachine, admin_value: int, when_done: str):
+        super().__init__()
+        self.acs = acs
+        self.admin_value = admin_value
+        self.done_transition = when_done
+
+    def read_msg(self, message: Any) -> AcsReadMsgResult:
+        if not isinstance(message, models.DummyInput):
+            return AcsReadMsgResult(False, None)
+        return AcsReadMsgResult(True, None)
+
+    def get_msg(self) -> AcsMsgAndTransition:
+        """
+        Returns:
+            A SetParameterValueRequest for setting 'Admin Enable' to False
+        """
+        param_name = ParameterName.ADMIN_STATE
+        # if we want the cell to be down don't force it up
+        desired_admin_value = \
+                self.acs.desired_cfg.get_parameter(param_name) \
+                and self.admin_value
+        admin_value = \
+                self.acs.data_model.transform_for_enb(param_name,
+                                                      desired_admin_value)
+        admin_path = self.acs.data_model.get_parameter(param_name).path
+        param_values = {admin_path: admin_value}
+
+        request = models.SetParameterValues()
+        request.ParameterList = models.ParameterValueList()
+        request.ParameterList.arrayType = 'cwmp:ParameterValueStruct[%d]' \
+                                          % len(param_values)
+
+        name_value = models.ParameterValueStruct()
+        name_value.Name = admin_path
+        name_value.Value = models.anySimpleType()
+        name_value.Value.type = 'xsd:string'
+        name_value.Value.Data = str(admin_value)
+        request.ParameterList.ParameterValueStruct = [name_value]
+
+        return AcsMsgAndTransition(request, self.done_transition)
+
+    @classmethod
+    def state_description(cls) -> str:
+        return 'Disabling admin_enable (Cavium only)'
+
+
+class MikrotikIntercell10WaitDisableAdminEnableState(EnodebAcsState):
+    def __init__(
+            self,
+            acs: EnodebAcsStateMachine,
+            admin_value: int,
+            when_done: str,
+            when_add: str,
+            when_delete: str
+    ):
+        super().__init__()
+        self.acs = acs
+        self.done_transition = when_done
+        self.add_obj_transition = when_add
+        self.del_obj_transition = when_delete
+        self.admin_value = admin_value
+
+    def read_msg(self, message: Any) -> Optional[str]:
+        if type(message) == models.Fault:
+            logging.error('Received Fault in response to SetParameterValues')
+            if message.SetParameterValuesFault is not None:
+                for fault in message.SetParameterValuesFault:
+                    logging.error(
+                        'SetParameterValuesFault Param: %s, Code: %s, String: %s',
+                        fault.ParameterName, fault.FaultCode, fault.FaultString)
+            raise Tr069Error(
+                'Received Fault in response to SetParameterValues '
+                '(faultstring = %s)' % message.FaultString)
+        elif not isinstance(message, models.SetParameterValuesResponse):
+            return AcsReadMsgResult(False, None)
+        if message.Status != 0:
+            raise Tr069Error('Received SetParameterValuesResponse with '
+                             'Status=%d' % message.Status)
+        param_name = ParameterName.ADMIN_STATE
+        desired_admin_value = \
+                self.acs.desired_cfg.get_parameter(param_name) \
+                and self.admin_value
+        magma_value = \
+                self.acs.data_model.transform_for_magma(param_name,
+                                                        desired_admin_value)
+        self.acs.device_cfg.set_parameter(param_name, magma_value)
+
+        if len(get_all_objects_to_delete(self.acs.desired_cfg,
+                                      self.acs.device_cfg)) > 0:
+            return AcsReadMsgResult(True, self.del_obj_transition)
+        elif len(get_all_objects_to_add(self.acs.desired_cfg,
+                                      self.acs.device_cfg)) > 0:
+            return AcsReadMsgResult(True, self.add_obj_transition)
+        else:
+            return AcsReadMsgResult(True, self.done_transition)
+
+    @classmethod
+    def state_description(cls) -> str:
+        return 'Disabling admin_enable (Cavium only)'
+
 
 class MikrotikIntercell10TrDataModel(DataModel):
     """
-    Class to represent relevant data model parameters from TR-196/TR-098.
-    This class is effectively read-only.
+    Class to represent relevant data model parameters from TR-196/TR-098/TR-181.
+    This class is effectively read-only
 
     This model specifically targets Mikrotik Intercell 10 units.
-
-    These models have these idiosyncrasies (on account of running TR098):
-
-    - Parameter content root is different (InternetGatewayDevice)
-    - GetParameter queries with a wildcard e.g. InternetGatewayDevice. do
-      not respond with the full tree (we have to query all parameters)
-    - MME status is not exposed - we assume the MME is connected if
-      the eNodeB is transmitting (OpState=true)
-    - Parameters such as band capability/duplex config
-      are rooted under `boardconf.` and not the device config root
-    - Parameters like Admin state, CellReservedForOperatorUse,
-      Duplex mode, DL bandwidth and Band capability have different
-      formats from Intel-based Mikrotik units, necessitating,
-      formatting before configuration and transforming values
-      read from eNodeB state.
-    - Num PLMNs is not reported by these units
     """
     # Mapping of TR parameter paths to aliases
     DEVICE_PATH = 'Device.'
     FAP_PATH = DEVICE_PATH + 'FAP.'
     FAPSERVICE_PATH = DEVICE_PATH + 'Services.FAPService.1.'
-    EEPROM_PATH = 'boardconf.status.eepromInfo.'
     PARAMETERS = {
         # Top-level objects
         ParameterName.DEVICE: TrParam(DEVICE_PATH, True, TrParameterType.OBJECT, False),
         ParameterName.FAP_SERVICE: TrParam(FAPSERVICE_PATH, True, TrParameterType.OBJECT, False),
 
-        # General information
+        # Device info parameters
         ParameterName.MME_STATUS: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.OpState', True, TrParameterType.BOOLEAN, False),
-        ParameterName.GPS_LAT: TrParam(FAP_PATH + 'GPS.ContinuousGPSStatus.Latitude', True, TrParameterType.STRING, False),
-        ParameterName.GPS_LONG: TrParam(FAP_PATH + 'GPS.ContinuousGPSStatus.Longitude', True, TrParameterType.STRING, False),
+        ParameterName.GPS_STATUS: TrParam(DEVICE_PATH + 'FAP.GPS.ContinuousGPSStatus.GotFix', True, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.GPS_LAT: TrParam(DEVICE_PATH + 'FAP.GPS.LockedLatitude', True, TrParameterType.INT, False),
+        ParameterName.GPS_LONG: TrParam(DEVICE_PATH + 'FAP.GPS.LockedLongitude', True, TrParameterType.INT, False),
         ParameterName.SW_VERSION: TrParam(DEVICE_PATH + 'DeviceInfo.SoftwareVersion', True, TrParameterType.STRING, False),
-        ParameterName.SERIAL_NUMBER: TrParam(DEVICE_PATH + 'DeviceInfo.SerialNumber', True, TrParameterType.STRING, False), # Missing
+        ParameterName.SERIAL_NUMBER: TrParam(DEVICE_PATH + 'DeviceInfo.SerialNumber', True, TrParameterType.STRING, False),
 
         # Capabilities
-        ParameterName.DUPLEX_MODE_CAPABILITY: TrParam(EEPROM_PATH + 'div_multiple', True, TrParameterType.STRING, False), # Missing
-        ParameterName.BAND_CAPABILITY: TrParam(EEPROM_PATH + 'work_mode', True, TrParameterType.STRING, False), # Missing
+        ParameterName.DUPLEX_MODE_CAPABILITY: TrParam(FAPSERVICE_PATH + 'Capabilities.LTE.DuplexMode', True, TrParameterType.STRING, False),
+        ParameterName.BAND_CAPABILITY: TrParam(FAPSERVICE_PATH + 'Capabilities.LTE.BandsSupported', True, TrParameterType.UNSIGNED_INT, False),
 
         # RF-related parameters
         ParameterName.EARFCNDL: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.EARFCNDL', True, TrParameterType.UNSIGNED_INT, False),
         ParameterName.EARFCNUL: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.EARFCNUL', True, TrParameterType.UNSIGNED_INT, False),
         ParameterName.BAND: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.FreqBandIndicator', True, TrParameterType.UNSIGNED_INT, False),
         ParameterName.PCI: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.PhyCellID', True, TrParameterType.STRING, False),
-        ParameterName.DL_BANDWIDTH: TrParam(DEVICE_PATH + 'Services.RfConfig.1.RfCarrierCommon.carrierBwMhz', True, TrParameterType.INT, False), # Missing
+        ParameterName.DL_BANDWIDTH: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.DLBandwidth', True, TrParameterType.STRING, False),
+        ParameterName.UL_BANDWIDTH: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.ULBandwidth', True, TrParameterType.STRING, False),
         ParameterName.CELL_ID: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.Common.CellIdentity', True, TrParameterType.UNSIGNED_INT, False),
         ParameterName.SUBFRAME_ASSIGNMENT: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.PHY.TDDFrame.SubFrameAssignment', True, TrParameterType.INT, False),
         ParameterName.SPECIAL_SUBFRAME_PATTERN: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.PHY.TDDFrame.SpecialSubframePatterns', True, TrParameterType.INT, False),
@@ -156,10 +292,19 @@ class MikrotikIntercell10TrDataModel(DataModel):
         ParameterName.OP_STATE: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.OpState', True, TrParameterType.UNSIGNED_INT, False),
         ParameterName.RF_TX_STATUS: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.RFTxStatus', True, TrParameterType.UNSIGNED_INT, False),
 
+        # RAN parameters
+        ParameterName.CELL_RESERVED: TrParam(
+            FAPSERVICE_PATH
+            + 'CellConfig.LTE.RAN.CellRestriction.CellReservedForOperatorUse', True, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.CELL_BARRED: TrParam(
+            FAPSERVICE_PATH
+            + 'CellConfig.LTE.RAN.CellRestriction.CellBarred', True, TrParameterType.UNSIGNED_INT, False),
+
         # Core network parameters
         ParameterName.MME_IP: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.Gateway.S1SigLinkServerList', True, TrParameterType.STRING, False),
         ParameterName.MME_PORT: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.Gateway.S1SigLinkPort', True, TrParameterType.UNSIGNED_INT, False),
         ParameterName.NUM_PLMNS: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNListNumberOfEntries', True, TrParameterType.UNSIGNED_INT, False),
+        # PLMN arrays are added below
         ParameterName.TAC: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.TAC', True, TrParameterType.UNSIGNED_INT, False),
         ParameterName.IP_SEC_ENABLE: TrParam(DEVICE_PATH + 'IPsec.Enable', False, TrParameterType.UNSIGNED_INT, False),
 
@@ -173,6 +318,9 @@ class MikrotikIntercell10TrDataModel(DataModel):
         ParameterName.PERF_MGMT_UPLOAD_URL: TrParam(FAP_PATH + 'PerfMgmt.Config.1.URL', False, TrParameterType.STRING, False),
         ParameterName.PERF_MGMT_USER: TrParam(FAP_PATH + 'PerfMgmt.Config.1.Username', False, TrParameterType.STRING, False),
         ParameterName.PERF_MGMT_PASSWORD: TrParam(FAP_PATH + 'PerfMgmt.Config.1.Password', False, TrParameterType.STRING, False),
+
+        #PLMN Info
+        ParameterName.PLMN_LIST: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNList.', False, TrParameterType.OBJECT, False),
     }
 
     NUM_PLMNS_IN_CONFIG = 6
@@ -240,7 +388,6 @@ class MikrotikIntercell10TrDataModel(DataModel):
             params.append(ParameterName.PLMN_N_PRIMARY % i)
             params.append(ParameterName.PLMN_N_PLMNID % i)
             names[ParameterName.PLMN_N % i] = params
-
         return names
 
 
