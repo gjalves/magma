@@ -7,6 +7,7 @@ LICENSE file in the root directory of this source tree. An additional grant
 of patent rights can be found in the PATENTS file in the same directory.
 """
 
+import logging
 from typing import Optional, Any, Callable, Dict, List, Type
 from magma.common.service import MagmaService
 from magma.enodebd.data_models.data_model import TrParam, DataModel
@@ -21,15 +22,22 @@ from magma.enodebd.devices.mikrotik_intercell_10 import \
     MikrotikIntercell10GetObjectParametersState, \
     MikrotikIntercell10WaitGetTransientParametersState
 from magma.enodebd.devices.device_utils import EnodebDeviceName
+from magma.enodebd.exceptions import Tr069Error
+from magma.enodebd.state_machines.enb_acs import EnodebAcsStateMachine
 from magma.enodebd.state_machines.enb_acs_impl import \
     BasicEnodebAcsStateMachine
 from magma.enodebd.state_machines.enb_acs_states import \
     WaitInformState, SendGetTransientParametersState, \
+    MikrotikIntercell10WaitGetTransientParametersState, \
     GetParametersState, WaitGetParametersState, DeleteObjectsState, \
-    AddObjectsState, SetParameterValuesState, WaitSetParameterValuesState, \
-    WaitRebootResponseState, WaitInformMRebootState, EnodebAcsState, \
-    WaitEmptyMessageState, ErrorState, \
-    EndSessionState, MikrotikIntercell10SendRebootState, GetRPCMethodsState
+    AddObjectsState, SetParameterValuesNotAdminState, \
+    WaitSetParameterValuesState, MikrotikIntercell10SendRebootState, WaitRebootResponseState, \
+    WaitInformMRebootState, EnodebAcsState, AcsMsgAndTransition, \
+    AcsReadMsgResult, WaitEmptyMessageState, ErrorState, EndSessionState, \
+    GetRPCMethodsState, WaitGetObjectParametersState
+from magma.enodebd.state_machines.acs_state_utils import \
+     get_all_objects_to_delete, get_all_objects_to_add
+from magma.enodebd.tr069 import models
 
 
 class MikrotikIntercell10Handler(BasicEnodebAcsStateMachine):
@@ -55,11 +63,16 @@ class MikrotikIntercell10Handler(BasicEnodebAcsStateMachine):
             'wait_get_transient_params': MikrotikIntercell10WaitGetTransientParametersState(self, when_get='get_params', when_get_obj_params='get_obj_params', when_delete='delete_objs', when_add='add_objs', when_set='set_params', when_skip='end_session'),
             'get_params': GetParametersState(self, when_done='wait_get_params'),
             'wait_get_params': WaitGetParametersState(self, when_done='get_obj_params'),
-            'get_obj_params': MikrotikIntercell10GetObjectParametersState(self, when_delete='delete_objs', when_add='add_objs', when_set='set_params', when_skip='end_session'),
+            'get_obj_params': MikrotikIntercell10GetObjectParametersState(self, when_done='wait_get_obj_params'),
+            'wait_get_obj_params': MikrotikIntercell10WaitGetObjectParametersState(self, when_edit='disable_admin', when_skip='get_transient_params'),
+            'disable_admin': MikrotikIntercell10DisableAdminEnableState(self, admin_value='0', when_done='wait_disable_admin'),
+            'wait_disable_admin': MikrotikIntercell10WaitDisableAdminEnableState(self, admin_value='0', when_add='add_objs', when_delete='delete_objs', when_done='set_params'),
             'delete_objs': DeleteObjectsState(self, when_add='add_objs', when_skip='set_params'),
             'add_objs': AddObjectsState(self, when_done='set_params'),
-            'set_params': SetParameterValuesState(self, when_done='wait_set_params'),
-            'wait_set_params': WaitSetParameterValuesState(self, when_done='check_get_params', when_apply_invasive='check_get_params'),
+            'set_params': SetParameterValuesNotAdminState(self, when_done='wait_set_params'),
+            'wait_set_params': WaitSetParameterValuesState(self, when_done='enable_admin', when_apply_invasive='enable_admin'),
+            'enable_admin': MikrotikIntercell10DisableAdminEnableState(self, admin_value='1', when_done='wait_enable_admin'),
+            'wait_enable_admin': MikrotikIntercell10WaitDisableAdminEnableState(self, admin_value='1', when_done='check_get_params', when_add='check_get_params', when_delete='check_get_params'),
             'check_get_params': GetParametersState(self, when_done='check_wait_get_params', request_all_params=True),
             'check_wait_get_params': WaitGetParametersState(self, when_done='end_session'),
             'end_session': EndSessionState(self),
@@ -304,6 +317,7 @@ class MikrotikIntercell10TrDataModel(DataModel):
         ParameterName.MME_IP: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.Gateway.S1SigLinkServerList', True, TrParameterType.STRING, False),
         ParameterName.MME_PORT: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.Gateway.S1SigLinkPort', True, TrParameterType.UNSIGNED_INT, False),
         ParameterName.NUM_PLMNS: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNListNumberOfEntries', True, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.PLMN: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNList.', True, TrParameterType.OBJECT, False),
         # PLMN arrays are added below
         ParameterName.TAC: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.TAC', True, TrParameterType.UNSIGNED_INT, False),
         ParameterName.IP_SEC_ENABLE: TrParam(DEVICE_PATH + 'IPsec.Enable', False, TrParameterType.UNSIGNED_INT, False),
@@ -337,9 +351,11 @@ class MikrotikIntercell10TrDataModel(DataModel):
 
     TRANSFORMS_FOR_ENB[ParameterName.ADMIN_STATE] = transform_for_enb.admin_state
     TRANSFORMS_FOR_MAGMA = {
-        # We don't set these parameters
-        ParameterName.BAND_CAPABILITY: transform_for_magma.band_capability,
-        ParameterName.DUPLEX_MODE_CAPABILITY: transform_for_magma.duplex_mode
+        ParameterName.DL_BANDWIDTH: transform_for_magma.bandwidth,
+        ParameterName.UL_BANDWIDTH: transform_for_magma.bandwidth,
+        # We don't set GPS, so we don't need transform for enb
+        ParameterName.GPS_LAT: transform_for_magma.gps_tr181,
+        ParameterName.GPS_LONG: transform_for_magma.gps_tr181
     }
 
     @classmethod
@@ -393,5 +409,5 @@ class MikrotikIntercell10TrDataModel(DataModel):
 
 class MikrotikIntercell10TrConfigurationInitializer(EnodebConfigurationPostProcessor):
     def postprocess(self, desired_cfg: EnodebConfiguration) -> None:
-
-        desired_cfg.delete_parameter(ParameterName.ADMIN_STATE)
+        desired_cfg.set_parameter(ParameterName.CELL_BARRED, 1)
+        desired_cfg.set_parameter(ParameterName.ADMIN_STATE, "1")
