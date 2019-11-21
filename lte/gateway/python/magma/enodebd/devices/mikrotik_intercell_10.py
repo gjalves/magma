@@ -69,12 +69,12 @@ class MikrotikIntercell10Handler(BasicEnodebAcsStateMachine):
             'wait_post_reboot_inform': WaitInformMRebootState(self, when_done='wait_empty', when_timeout='wait_inform'),
             # The states below are entered when an unexpected message type is
             # received
-            'unexpected_fault': ErrorState(self),
+            'unexpected_fault': ErrorState(self)
         }
 
     @property
     def device_name(self) -> str:
-        return EnodebDeviceName.BAICELLS_QAFA
+        return EnodebDeviceName.MIKROTIK_INTERCELL_10
 
     @property
     def data_model_class(self) -> Type[DataModel]:
@@ -142,34 +142,37 @@ class MikrotikIntercell10TrDataModel(DataModel):
         ParameterName.BAND_CAPABILITY: TrParam(EEPROM_PATH + 'work_mode', True, TrParameterType.STRING, False), # Missing
 
         # RF-related parameters
-        ParameterName.EARFCNDL: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.EARFCNDL', True, TrParameterType.INT, False), # Missing
-        ParameterName.PCI: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.PhyCellID', True, TrParameterType.INT, False), # Missing
+        ParameterName.EARFCNDL: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.EARFCNDL', True, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.EARFCNUL: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.EARFCNUL', True, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.BAND: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.FreqBandIndicator', True, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.PCI: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.RF.PhyCellID', True, TrParameterType.STRING, False),
         ParameterName.DL_BANDWIDTH: TrParam(DEVICE_PATH + 'Services.RfConfig.1.RfCarrierCommon.carrierBwMhz', True, TrParameterType.INT, False), # Missing
-        ParameterName.SUBFRAME_ASSIGNMENT: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.PHY.TDDFrame.SubFrameAssignment', True, 'bool', False), # Missing
-        ParameterName.SPECIAL_SUBFRAME_PATTERN: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.PHY.TDDFrame.SpecialSubframePatterns', True, TrParameterType.INT, False), # Missing
         ParameterName.CELL_ID: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.Common.CellIdentity', True, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.SUBFRAME_ASSIGNMENT: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.PHY.TDDFrame.SubFrameAssignment', True, TrParameterType.INT, False),
+        ParameterName.SPECIAL_SUBFRAME_PATTERN: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.RAN.PHY.TDDFrame.SpecialSubframePatterns', True, TrParameterType.INT, False),
 
         # Other LTE parameters
-        ParameterName.ADMIN_STATE: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.AdminState', False, TrParameterType.STRING, False),
-        ParameterName.OP_STATE: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.OpState', True, TrParameterType.BOOLEAN, False),
-        ParameterName.RF_TX_STATUS: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.OpState', True, TrParameterType.BOOLEAN, False),
+        ParameterName.ADMIN_STATE: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.AdminState', False, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.OP_STATE: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.OpState', True, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.RF_TX_STATUS: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.RFTxStatus', True, TrParameterType.UNSIGNED_INT, False),
 
         # Core network parameters
-        ParameterName.MME_IP: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.Gateway.S1SigLinkServerList', True, TrParameterType.STRING, False), # Missing
-        ParameterName.MME_PORT: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.Gateway.S1SigLinkPort', True, TrParameterType.INT, False), # Missing
-        # This parameter is standard but doesn't exist
-        # ParameterName.NUM_PLMNS: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNListNumberOfEntries', True, TrParameterType.INT, False),
-        ParameterName.TAC: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.TAC', True, TrParameterType.INT, False), # Missing
-        ParameterName.IP_SEC_ENABLE: TrParam('boardconf.ipsec.ipsecConfig.onBoot', False, TrParameterType.BOOLEAN, False), # Missing
+        ParameterName.MME_IP: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.Gateway.S1SigLinkServerList', True, TrParameterType.STRING, False),
+        ParameterName.MME_PORT: TrParam(FAPSERVICE_PATH + 'FAPControl.LTE.Gateway.S1SigLinkPort', True, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.NUM_PLMNS: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.PLMNListNumberOfEntries', True, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.TAC: TrParam(FAPSERVICE_PATH + 'CellConfig.LTE.EPC.TAC', True, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.IP_SEC_ENABLE: TrParam(DEVICE_PATH + 'IPsec.Enable', False, TrParameterType.UNSIGNED_INT, False),
 
         # Management server parameters
-        ParameterName.PERIODIC_INFORM_ENABLE: TrParam(DEVICE_PATH + 'ManagementServer.PeriodicInformEnable', False, TrParameterType.BOOLEAN, False), # Missing
-        ParameterName.PERIODIC_INFORM_INTERVAL: TrParam(DEVICE_PATH + 'ManagementServer.PeriodicInformInterval', False, TrParameterType.INT, False), # Missing
+        ParameterName.PERIODIC_INFORM_ENABLE: TrParam(DEVICE_PATH + 'ManagementServer.PeriodicInformEnable', False, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.PERIODIC_INFORM_INTERVAL: TrParam(DEVICE_PATH + 'ManagementServer.PeriodicInformInterval', False, TrParameterType.INT, False),
 
         # Performance management parameters
-        ParameterName.PERF_MGMT_ENABLE: TrParam(DEVICE_PATH + 'FAP.PerfMgmt.Config.Enable', False, TrParameterType.BOOLEAN, False),
-        ParameterName.PERF_MGMT_UPLOAD_INTERVAL: TrParam(DEVICE_PATH + 'FAP.PerfMgmt.Config.PeriodicUploadInterval', False, TrParameterType.INT, False),
-        ParameterName.PERF_MGMT_UPLOAD_URL: TrParam(DEVICE_PATH + 'FAP.PerfMgmt.Config.URL', False, TrParameterType.STRING, False),
+        ParameterName.PERF_MGMT_ENABLE: TrParam(FAP_PATH + 'PerfMgmt.Config.1.Enable', False, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.PERF_MGMT_UPLOAD_INTERVAL: TrParam(FAP_PATH + 'PerfMgmt.Config.1.PeriodicUploadInterval', False, TrParameterType.UNSIGNED_INT, False),
+        ParameterName.PERF_MGMT_UPLOAD_URL: TrParam(FAP_PATH + 'PerfMgmt.Config.1.URL', False, TrParameterType.STRING, False),
+        ParameterName.PERF_MGMT_USER: TrParam(FAP_PATH + 'PerfMgmt.Config.1.Username', False, TrParameterType.STRING, False),
+        ParameterName.PERF_MGMT_PASSWORD: TrParam(FAP_PATH + 'PerfMgmt.Config.1.Password', False, TrParameterType.STRING, False),
     }
 
     NUM_PLMNS_IN_CONFIG = 6
