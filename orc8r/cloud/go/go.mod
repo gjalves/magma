@@ -36,7 +36,7 @@ require (
 	github.com/go-swagger/go-swagger v0.21.0
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/protobuf v1.3.3
-	github.com/google/uuid v1.1.1
+	github.com/google/uuid v1.2.0
 	github.com/json-iterator/go v1.1.8 // indirect
 	github.com/labstack/echo v0.0.0-20181123063414-c54d9e8eed6c
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0
