@@ -24,7 +24,7 @@ if ("${LFDS}" STREQUAL "LFDS-NOTFOUND")
   message(FATAL_ERROR "LIB LFDS not found, please install it")
 endif ()
 
-add_executable(mme ${PROJECT_SOURCE_DIR}/oai_mme/oai_mme.c)
+add_executable(mme ${PROJECT_SOURCE_DIR}/oai_mme/oai_mme.c ${PROJECT_SOURCE_DIR}/oai_mme/plugins.c)
 
 # compile the needed macros
 
