@@ -44,7 +44,7 @@ typedef enum proto_map_return_code_e {
 **                                                                        **
 ***************************************************************************/
 
-static std::string map_rc_code2string(proto_map_rc_t rc) {
+static char* map_rc_code2string(proto_map_rc_t rc) {
   switch (rc) {
     case PROTO_MAP_OK:
       return "MAP_OK";
@@ -220,8 +220,14 @@ struct proto_map_s {
       return PROTO_MAP_NOT_CREATED;
     }
     if (!(map->empty())) {
-      map->clear();
+      for (auto itr = map->begin(); itr != map->end(); itr++) {
+        if (free_callback_func) {
+          valueT value = itr->second;
+          free_callback_func(reinterpret_cast<void**>(&value));
+        }
+      }
     }
+    map->clear();
     return PROTO_MAP_OK;
   }
   /***************************************************************************
@@ -295,5 +301,7 @@ typedef magma::proto_map_s<uint64_t, uint64_t> proto_map_uint64_uint64_t;
 typedef magma::proto_map_s<std::string, uint64_t> proto_map_string_uint64_t;
 // Map- Key: uint32_t, Data: uint64_t
 typedef magma::proto_map_s<uint32_t, uint64_t> proto_map_uint32_uint64_t;
+// Map- Key: uint32_t, Data: uint32_t
+typedef magma::proto_map_s<uint32_t, uint32_t> proto_map_uint32_uint32_t;
 
 }  // namespace magma

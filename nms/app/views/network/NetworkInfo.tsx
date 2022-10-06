@@ -13,19 +13,19 @@
 import type {DataRows} from '../../components/DataGrid';
 import type {FegLteNetwork, LteNetwork} from '../../../generated';
 
-import Button from '@material-ui/core/Button';
+import Button from '@mui/material/Button';
 import DataGrid from '../../components/DataGrid';
-import DialogActions from '@material-ui/core/DialogActions';
-import DialogContent from '@material-ui/core/DialogContent';
-import FormLabel from '@material-ui/core/FormLabel';
-import List from '@material-ui/core/List';
-import LteNetworkContext from '../../components/context/LteNetworkContext';
-import NetworkContext from '../../components/context/NetworkContext';
-import OutlinedInput from '@material-ui/core/OutlinedInput';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import FormLabel from '@mui/material/FormLabel';
+import List from '@mui/material/List';
+import LteNetworkContext from '../../context/LteNetworkContext';
+import NetworkContext from '../../context/NetworkContext';
+import OutlinedInput from '@mui/material/OutlinedInput';
 import React from 'react';
 import axios from 'axios';
 
-import AppContext from '../../components/context/AppContext';
+import AppContext from '../../context/AppContext';
 import {AltFormField} from '../../components/FormField';
 import {FEG_LTE, LTE} from '../../../shared/types/network';
 import {getErrorMessage} from '../../util/ErrorUtils';
@@ -107,7 +107,7 @@ export function NetworkInfoEdit(props: EditProps) {
         await ctx.updateNetworks({
           networkId: lteNetwork.id,
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          lteNetwork: lteNetwork as any, // TODO[TS-migration] The type UpdateNetworkContextProps is probably wrong
+          lteNetwork: lteNetwork as any, // TODO[TS-migration] The type UpdateNetworkContextParams is probably wrong
         });
         enqueueSnackbar('Network configs saved successfully', {
           variant: 'success',

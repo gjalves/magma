@@ -45,7 +45,7 @@ namespace lte {
  * create_s1ap_state allocates a new s1ap_state_t struct and initializes
  * its properties.
  */
-s1ap_state_t* create_s1ap_state(uint32_t max_enbs, uint32_t max_ues);
+s1ap_state_t* create_s1ap_state(void);
 /**
  * free_s1ap_state deallocates a s1ap_state_t struct and its properties.
  */
@@ -56,9 +56,8 @@ void free_s1ap_state(s1ap_state_t* state_cache_p);
  * to maintain S1AP task state, allocating and freeing related state structs.
  */
 class S1apStateManager
-    : public StateManager<s1ap_state_t, ue_description_t,
-                          magma::lte::oai::S1apState,
-                          magma::lte::oai::UeDescription, S1apStateConverter> {
+    : public StateManager<s1ap_state_t, oai::UeDescription, oai::S1apState,
+                          oai::UeDescription, S1apStateConverter> {
  public:
   /**
    * Returns an instance of S1apStateManager, guaranteed to be thread safe and
@@ -99,6 +98,9 @@ class S1apStateManager
    * Returns a pointer to s1ap_imsi_map
    */
   s1ap_imsi_map_t* get_s1ap_imsi_map();
+  map_uint64_ue_description_t* get_s1ap_ue_state();
+  void s1ap_write_ue_state_to_db(const oai::UeDescription* ue_context,
+                                 const std::string& imsi_str);
 
  private:
   S1apStateManager();
@@ -116,6 +118,7 @@ class S1apStateManager
   uint32_t max_enbs_;
   std::size_t s1ap_imsi_map_hash_;
   s1ap_imsi_map_t* s1ap_imsi_map_;
+  map_uint64_ue_description_t state_ue_map;
 };
 }  // namespace lte
 }  // namespace magma

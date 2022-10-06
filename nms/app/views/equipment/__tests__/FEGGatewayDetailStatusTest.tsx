@@ -11,17 +11,16 @@
  * limitations under the License.
  */
 
-import FEGGatewayContext from '../../../components/context/FEGGatewayContext';
+import FEGGatewayContext from '../../../context/FEGGatewayContext';
 import FEGGatewayDetailStatus from '../FEGGatewayDetailStatus';
 import MagmaAPI from '../../../api/MagmaAPI';
-import MuiStylesThemeProvider from '@material-ui/styles/ThemeProvider';
 import React from 'react';
 import defaultTheme from '../../../theme/default';
 import {FederationGatewayHealthStatus} from '../../../components/GatewayUtils';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
-import {MuiThemeProvider} from '@material-ui/core/styles';
+import {StyledEngineProvider, ThemeProvider} from '@mui/material/styles';
 import {mockAPI} from '../../../util/TestUtils';
-import {render, wait} from '@testing-library/react';
+import {render} from '@testing-library/react';
 import type {
   FederationGateway,
   PromqlReturnObject,
@@ -132,12 +131,13 @@ describe('<FEGGatewayDetailStatus />', () => {
         '/nms/mynetwork/equipment/overview/gateway/test_feg_gw0/overview',
       ]}
       initialIndex={0}>
-      <MuiThemeProvider theme={defaultTheme}>
-        <MuiStylesThemeProvider theme={defaultTheme}>
+      <StyledEngineProvider injectFirst>
+        <ThemeProvider theme={defaultTheme}>
           <FEGGatewayContext.Provider
             value={{
               state: fegGateways,
               setState: async () => {},
+              updateGateway: async () => {},
               refetch: () => {},
               health: fegGatewaysHealth,
               activeFegGatewayId: mockGw0.id,
@@ -149,16 +149,15 @@ describe('<FEGGatewayDetailStatus />', () => {
               />
             </Routes>
           </FEGGatewayContext.Provider>
-        </MuiStylesThemeProvider>
-      </MuiThemeProvider>
+        </ThemeProvider>
+      </StyledEngineProvider>
     </MemoryRouter>
   );
 
   it('renders federation gateway status correctly', async () => {
-    const {getByTestId} = render(<Wrapper />);
-    await wait();
+    const {getByTestId, findByTestId} = render(<Wrapper />);
     // verify gateway status
-    expect(getByTestId('Health')).toHaveTextContent('Good');
+    expect(await findByTestId('Health')).toHaveTextContent('Good');
     expect(getByTestId('Last Check in')).toHaveTextContent(
       mockCheckinTime.toLocaleString(),
     );

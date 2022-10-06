@@ -11,15 +11,14 @@
  * limitations under the License.
  */
 
-import FEGGatewayContext from '../../../components/context/FEGGatewayContext';
+import FEGGatewayContext from '../../../context/FEGGatewayContext';
 import FEGGatewaySummary from '../FEGGatewaySummary';
-import MuiStylesThemeProvider from '@material-ui/styles/ThemeProvider';
 import React from 'react';
 import defaultTheme from '../../../theme/default';
 import {FederationGatewayHealthStatus} from '../../../components/GatewayUtils';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
-import {MuiThemeProvider} from '@material-ui/core/styles';
-import {render, wait} from '@testing-library/react';
+import {StyledEngineProvider, ThemeProvider} from '@mui/material/styles';
+import {render} from '@testing-library/react';
 import type {FederationGateway} from '../../../../generated';
 
 const mockHardwareId = 'c9439d30-61ef-46c7-93f2-e01fc131244d';
@@ -100,12 +99,13 @@ describe('<FEGEquipmentGateway />', () => {
         '/nms/mynetwork/equipment/overview/gateway/test_feg_gw0/overview',
       ]}
       initialIndex={0}>
-      <MuiThemeProvider theme={defaultTheme}>
-        <MuiStylesThemeProvider theme={defaultTheme}>
+      <StyledEngineProvider injectFirst>
+        <ThemeProvider theme={defaultTheme}>
           <FEGGatewayContext.Provider
             value={{
               state: fegGateways,
               setState: async () => {},
+              updateGateway: async () => {},
               refetch: () => {},
               health: fegGatewaysHealth,
               activeFegGatewayId: mockGw0.id,
@@ -117,16 +117,16 @@ describe('<FEGEquipmentGateway />', () => {
               />
             </Routes>
           </FEGGatewayContext.Provider>
-        </MuiStylesThemeProvider>
-      </MuiThemeProvider>
+        </ThemeProvider>
+      </StyledEngineProvider>
     </MemoryRouter>
   );
 
   it('renders federation gateway summary correctly', async () => {
-    const {getByTestId} = render(<Wrapper />);
-    await wait();
+    const {getByTestId, findByTestId} = render(<Wrapper />);
+
     // verify gateway information
-    expect(getByTestId('Name')).toHaveTextContent('test_gateway');
+    expect(await findByTestId('Name')).toHaveTextContent('test_gateway');
     expect(getByTestId('Gateway ID')).toHaveTextContent('test_feg_gw0');
     expect(getByTestId('Hardware UUID')).toHaveTextContent(
       'c9439d30-61ef-46c7-93f2-e01fc131244d',

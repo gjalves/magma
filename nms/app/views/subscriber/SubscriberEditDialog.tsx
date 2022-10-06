@@ -11,26 +11,27 @@
  * limitations under the License.
  */
 
-import Button from '@material-ui/core/Button';
-import Checkbox from '@material-ui/core/Checkbox';
-import Dialog from '@material-ui/core/Dialog';
-import DialogActions from '@material-ui/core/DialogActions';
-import DialogContent from '@material-ui/core/DialogContent';
+import Button from '@mui/material/Button';
+import Checkbox from '@mui/material/Checkbox';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '../../theme/design-system/DialogTitle';
 import EditSubscriberApnStaticIps from './SubscriberApnStaticIpsEdit';
 import EditSubscriberTrafficPolicy from './SubscriberTrafficPolicyEdit';
-import FormControl from '@material-ui/core/FormControl';
-import FormLabel from '@material-ui/core/FormLabel';
-import List from '@material-ui/core/List';
-import ListItemText from '@material-ui/core/ListItemText';
-import LteNetworkContext from '../../components/context/LteNetworkContext';
-import MenuItem from '@material-ui/core/MenuItem';
-import OutlinedInput from '@material-ui/core/OutlinedInput';
+import FormControl from '@mui/material/FormControl';
+import FormLabel from '@mui/material/FormLabel';
+import List from '@mui/material/List';
+import ListItemText from '@mui/material/ListItemText';
+import LteNetworkContext from '../../context/LteNetworkContext';
+import MenuItem from '@mui/material/MenuItem';
+import OutlinedInput from '@mui/material/OutlinedInput';
+import PolicyContext from '../../context/PolicyContext';
 import React, {useContext, useEffect, useState} from 'react';
-import Select from '@material-ui/core/Select';
-import SubscriberContext from '../../components/context/SubscriberContext';
-import Tab from '@material-ui/core/Tab';
-import Tabs from '@material-ui/core/Tabs';
+import Select from '@mui/material/Select';
+import SubscriberContext from '../../context/SubscriberContext';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import TypedSelect from '../../components/TypedSelect';
 import nullthrows from '../../../shared/util/nullthrows';
 import {AltFormField, PasswordInput} from '../../components/FormField';
@@ -39,7 +40,7 @@ import {LteSubscription} from '../../../generated';
 import {base64ToHex, hexToBase64, isValidHex} from '../../util/strings';
 import {colors} from '../../theme/default';
 import {getErrorMessage} from '../../util/ErrorUtils';
-import {makeStyles} from '@material-ui/styles';
+import {makeStyles} from '@mui/styles';
 import {useEnqueueSnackbar} from '../../hooks/useSnackbar';
 import {useParams} from 'react-router-dom';
 import type {
@@ -56,7 +57,6 @@ import type {
 const useStyles = makeStyles(() => ({
   tabBar: {
     backgroundColor: colors.primary.brightGray,
-    color: colors.primary.white,
   },
   input: {
     display: 'inline-flex',
@@ -119,13 +119,14 @@ export function SubscriberEditDialog(props: DialogProps) {
   const [tabPos, setTabPos] = useState(
     editProps ? EditTableType[editProps.editTable] : 0,
   );
-  const ctx = useContext(SubscriberContext);
+  const subscriberContext = useContext(SubscriberContext);
+  const policyContext = useContext(PolicyContext);
   const lteCtx = useContext(LteNetworkContext);
   const classes = useStyles();
   const params = useParams();
   const subscriberId = nullthrows(params.subscriberId);
   const [subscriberState, setSubscriberState] = useState<Subscriber>(
-    ctx.state[subscriberId],
+    subscriberContext.state[subscriberId],
   );
 
   const [authKey, setAuthKey] = useState(
@@ -141,14 +142,15 @@ export function SubscriberEditDialog(props: DialogProps) {
   const [subscriberStaticIPRows, setSubscriberStaticIPRows] = useState<
     Array<subscriberStaticIpsRowType>
   >(
-    Object.keys(ctx.state[subscriberId].config.static_ips || {}).map(
-      (apn: string) => {
-        return {
-          apnName: apn,
-          staticIp: ctx.state[subscriberId].config.static_ips?.[apn] || '',
-        };
-      },
-    ),
+    Object.keys(
+      subscriberContext.state[subscriberId].config.static_ips || {},
+    ).map((apn: string) => {
+      return {
+        apnName: apn,
+        staticIp:
+          subscriberContext.state[subscriberId].config.static_ips?.[apn] || '',
+      };
+    }),
   );
 
   const subscriberCoreNetwork = Object.keys(CoreNetworkTypes).map(
@@ -183,7 +185,7 @@ export function SubscriberEditDialog(props: DialogProps) {
 
   const subscriberProps: EditSubscriberProps = {
     subscriberState: subscriberState,
-    onSubscriberChange: (key: string, val) => {
+    onSubscriberChange: (key, val) => {
       setSubscriberState({...subscriberState, [key]: val});
     },
     onTrafficPolicyChange: (key, val, index) => {
@@ -239,10 +241,12 @@ export function SubscriberEditDialog(props: DialogProps) {
       subscriberStaticIPRows.forEach(
         apn => (staticIps[apn.apnName] = apn.staticIp),
       );
-      await ctx.setState?.(subscriberState.id, {
+      await subscriberContext.setState?.(subscriberState.id, {
         ...mutableSubscriber,
         static_ips: staticIps,
       });
+      policyContext.refetch();
+
       enqueueSnackbar('Subscriber saved successfully', {
         variant: 'success',
       });
@@ -378,14 +382,10 @@ function EditSubscriberDetails(props: EditSubscriberProps) {
               onChange={({target}) => {
                 props.onSubscriberChange(
                   'forbidden_network_types',
-                  target.value as string,
+                  target.value as Array<SubscriberForbiddenNetworkTypesEnum>,
                 );
               }}
-              renderValue={selected =>
-                (selected as Array<SubscriberForbiddenNetworkTypesEnum>).join(
-                  ', ',
-                )
-              }
+              renderValue={selected => selected.join(', ')}
               input={<OutlinedInput />}>
               {forbiddenNetworkTypes.map((value, idx: number) => (
                 <MenuItem key={idx} value={value}>

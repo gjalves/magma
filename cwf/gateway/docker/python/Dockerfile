@@ -67,6 +67,7 @@ RUN apt-get -y update && apt-get -y install \
     pkg-config \
     python-cffi \
     python3-pip \
+    python3-ryu \
     python3.8 \
     python3.8-dev \
     redis-server \
@@ -86,7 +87,6 @@ RUN python3.8 -m pip install --no-cache-dir \
     fire \
     envoy \
     glob2 \
-    ryu \
     flask \
     aiodns \
     pymemoize \
@@ -111,13 +111,8 @@ RUN python3.8 -m pip install --no-cache-dir \
     click \
     pycares \
     python-dateutil \
-    aioeventlet>=0.4 \
+    aioeventlet@git+https://github.com/magma/deb-python-aioeventlet@86130360db113430370ed6c64d42aee3b47cd619 \
     jsonpickle
-
-# TODO: aioeventlet>=0.4 was manually added to fix regression tracked with GH issue 6152
-# Fix to pull the patched aioeventlet build deployed by the aioeventlet_build.sh script
-
-COPY cwf/gateway/deploy/roles/ovs/files/nx_actions.py /usr/local/lib/python3.8/dist-packages/ryu/ofproto/
 
 # Temporary workaround to restore uplink bridge flows
 RUN mkdir -p /var/opt/magma/scripts
@@ -160,8 +155,3 @@ COPY --from=builder /build/python/gen /usr/local/lib/python3.8/dist-packages/
 
 # update aioh2 since there is no pushed package, but master is fixed
 RUN python3.8 -m pip install --force-reinstall git+https://github.com/URenko/aioh2.git
-
-# patching aioeventlet
-RUN mkdir /patches
-COPY lte/gateway/deploy/roles/magma/files/patches/aioeventlet.py38.patch /patches
-RUN patch -N -s -f /usr/local/lib/python3.8/dist-packages/aioeventlet.py < patches/aioeventlet.py38.patch

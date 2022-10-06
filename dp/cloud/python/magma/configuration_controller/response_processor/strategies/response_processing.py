@@ -13,13 +13,13 @@ limitations under the License.
 
 import logging
 from datetime import datetime
-from typing import Callable, Dict, Optional
+from typing import Callable, Optional
 
 from magma.configuration_controller.custom_types.custom_types import DBResponse
 from magma.configuration_controller.response_processor.response_db_processor import (
     ResponseDBProcessor,
 )
-from magma.db_service.models import DBCbsd, DBCbsdState, DBChannel, DBGrant
+from magma.db_service.models import DBCbsd, DBCbsdState, DBGrant, DBGrantState
 from magma.db_service.session_manager import Session
 from magma.mappings.types import CbsdStates, GrantStates, ResponseCodes
 
@@ -46,7 +46,6 @@ def unregister_cbsd_on_response_condition(process_response_func) -> Callable:
     Currently a CBSD should be marked as unregistered on Domain Proxy if:
     * SAS returns a response with responseCode 105 (ResponseCodes.DEREGISTER)
     * SAS returns a response with responseCode 103 (ResponseCodes.INVALID_VALUE)
-      and responseData has "cbsdId" listed as the INVALID_VALUE parameter
 
     Parameters:
         process_response_func: Response processing function
@@ -55,10 +54,7 @@ def unregister_cbsd_on_response_condition(process_response_func) -> Callable:
         response processing function wrapper
     """
     def process_response_wrapper(obj: ResponseDBProcessor, response: DBResponse, session: Session) -> None:
-        if any([
-            response.response_code == ResponseCodes.DEREGISTER.value,
-            _is_response_invalid_value_cbsd_id(response),
-        ]):
+        if response.response_code in {ResponseCodes.DEREGISTER.value, ResponseCodes.INVALID_VALUE.value}:
             logger.info(f'SAS {response.payload} implies CBSD immedaite unregistration')
             _unregister_cbsd(response, session)
             return
@@ -80,34 +76,35 @@ def process_registration_response(obj: ResponseDBProcessor, response: DBResponse
 
     cbsd_id = response.payload.get("cbsdId", None)
     if response.response_code == ResponseCodes.SUCCESS.value and cbsd_id:
-        payload = response.request.payload
-        cbsd = _find_cbsd_from_request(session, payload)
-        if not cbsd:
-            return
-        cbsd.cbsd_id = cbsd_id
-        _change_cbsd_state(cbsd, session, CbsdStates.REGISTERED.value)
+        _process_registration_response(cbsd_id, response, session)
 
 
-def _find_cbsd_from_request(session: Session, payload: Dict) -> DBCbsd:
-    if "cbsdSerialNumber" in payload:
-        return session.query(DBCbsd).filter(
-            DBCbsd.cbsd_serial_number == payload.get("cbsdSerialNumber"),
-        ).scalar()
-    if "cbsdId" in payload:
-        return session.query(DBCbsd).filter(
-            DBCbsd.cbsd_id == payload.get("cbsdId"),
-        ).scalar()
-    logger.warning(f'Could not find CBSD in Database matching {payload=}.')
+def _process_registration_response(cbsd_id: str, response: DBResponse, session: Session):
+    payload = response.request.payload
 
-
-def _change_cbsd_state(cbsd: DBCbsd, session: Session, new_state: str) -> None:
-    if not cbsd:
+    where = _get_cbsd_filter(payload)
+    if not where:
         return
-    state = session.query(DBCbsdState).filter(
-        DBCbsdState.name == new_state,
-    ).scalar()
-    print(f"Changing {cbsd=} {cbsd.state=} to {new_state=}")
-    cbsd.state = state
+
+    state_id = session.query(DBCbsdState.id). \
+        filter(DBCbsdState.name == CbsdStates.REGISTERED.value)
+    _update_cbsd(session, where, {"state_id": state_id.subquery(), "cbsd_id": cbsd_id})
+
+
+def _get_cbsd_filter(payload):
+    if "cbsdSerialNumber" in payload:
+        return {"cbsd_serial_number": payload.get("cbsdSerialNumber")}
+    elif "cbsdId" in payload:
+        return {"cbsd_id": payload.get("cbsdId")}
+    else:
+        logger.warning(f'Could not find a CBSD identifier in {payload=}')
+        return
+
+
+def _update_cbsd(session, where_clause, update_clause):
+    session.query(DBCbsd). \
+        filter_by(**where_clause). \
+        update(update_clause)
 
 
 @unregister_cbsd_on_response_condition
@@ -120,7 +117,6 @@ def process_spectrum_inquiry_response(obj: ResponseDBProcessor, response: DBResp
         response: Database response object
         session: Database session
     """
-
     if response.response_code == ResponseCodes.SUCCESS.value:
         _create_channels(response, session)
         return
@@ -138,18 +134,16 @@ def _create_channels(response: DBResponse, session: Session):
             "Could not create channel from spectrumInquiryResponse. Response missing 'availableChannel' object",
         )
         return
+
+    channels = []
     for ac in available_channels:
         frequency_range = ac["frequencyRange"]
-        channel = DBChannel(
-            cbsd=cbsd,
-            low_frequency=frequency_range["lowFrequency"],
-            high_frequency=frequency_range["highFrequency"],
-            channel_type=ac["channelType"],
-            rule_applied=ac["ruleApplied"],
-            max_eirp=ac.get("maxEirp"),
-        )
-        logger.info(f"Creating channel for {cbsd=}")
-        session.add(channel)
+        channels.append({
+            "low_frequency": frequency_range["lowFrequency"],
+            "high_frequency": frequency_range["highFrequency"],
+            "max_eirp": ac.get("maxEirp", 37),
+        })
+    cbsd.channels = channels
 
 
 @unregister_cbsd_on_response_condition
@@ -165,30 +159,25 @@ def process_grant_response(obj: ResponseDBProcessor, response: DBResponse, sessi
     Returns:
         None
     """
-
-    if response.response_code != ResponseCodes.SUCCESS.value:
-        cbsd = response.request.cbsd
-        if cbsd:
-            cbsd.grant_attempts += 1
-
-    grant = _get_or_create_grant_from_response(obj, response, session)
-    if not grant:
-        return
-    _update_grant_from_response(response, grant)
-
     # Grant response codes worth considering here also are:
     # 400 - INTERFERENCE
-    # 401 - GRANT_CONFLICT
-    # Might need better processing, for now we set the state to IDLE in all cases other than SUCCESS
-    if response.response_code == ResponseCodes.SUCCESS.value:
-        new_state = obj.grant_states_map[GrantStates.GRANTED.value]
+    if response.response_code == ResponseCodes.GRANT_CONFLICT.value:
+        _unsync_conflict_from_response(obj, response, session)
+        return
+    if response.response_code != ResponseCodes.SUCCESS.value:
+        _remove_grant_from_response(response, session, unset_freq=True)
+        return
+
+    new_state = obj.grant_states_map[GrantStates.GRANTED.value]
+    grant = _get_grant_from_response(response, session)
+    if not grant:
+        grant = _create_grant_from_response(response, new_state, session)
     else:
-        new_state = obj.grant_states_map[GrantStates.IDLE.value]
-        unset_frequency(grant)
-    logger.info(
-        f'process_grant_responses: Updating grant state from {grant.state} to {new_state}',
-    )
-    grant.state = new_state
+        logger.info(
+            f'process_grant_responses: Updating grant state from {grant.state} to {new_state}',
+        )
+        grant.state = new_state
+    _update_grant_from_response(response, grant)
 
 
 @unregister_cbsd_on_response_condition
@@ -204,11 +193,9 @@ def process_heartbeat_response(obj: ResponseDBProcessor, response: DBResponse, s
     Returns:
         None
     """
-
-    grant = _get_or_create_grant_from_response(obj, response, session)
-    if not grant:
+    if response.response_code == ResponseCodes.TERMINATED_GRANT.value:
+        _remove_grant_from_response(response, session, unset_freq=True)
         return
-    _update_grant_from_response(response, grant)
 
     if response.response_code == ResponseCodes.SUCCESS.value:
         new_state = obj.grant_states_map[GrantStates.AUTHORIZED.value]
@@ -216,18 +203,19 @@ def process_heartbeat_response(obj: ResponseDBProcessor, response: DBResponse, s
         new_state = obj.grant_states_map[GrantStates.GRANTED.value]
     elif response.response_code == ResponseCodes.UNSYNC_OP_PARAM.value:
         new_state = obj.grant_states_map[GrantStates.UNSYNC.value]
-    elif response.response_code == ResponseCodes.TERMINATED_GRANT.value:
-        new_state = obj.grant_states_map[GrantStates.IDLE.value]
-        unset_frequency(grant)
-    elif response.response_code == ResponseCodes.DEREGISTER.value:
-        _terminate_all_grants_from_response(response, session)
-        return
     else:
-        new_state = grant.state
-    logger.info(
-        f'process_heartbeat_responses: Updating grant state from {grant.state} to {new_state}',
-    )
-    grant.state = new_state
+        return
+
+    grant = _get_grant_from_response(response, session)
+    if not grant:
+        grant = _create_grant_from_response(response, new_state, session)
+    else:
+        logger.info(
+            f'process_heartbeat_responses: Updating grant state from {grant.state} to {new_state}',
+        )
+        grant.state = new_state
+
+    _update_grant_from_response(response, grant)
     grant.last_heartbeat_request_time = datetime.now()
 
 
@@ -244,20 +232,13 @@ def process_relinquishment_response(obj: ResponseDBProcessor, response: DBRespon
     Returns:
         None
     """
-
-    grant = _get_or_create_grant_from_response(obj, response, session)
-    if not grant:
-        return
-    _update_grant_from_response(response, grant)
-
     if response.response_code == ResponseCodes.SUCCESS.value:
-        new_state = obj.grant_states_map[GrantStates.IDLE.value]
-    else:
-        new_state = grant.state
-    logger.info(
-        f'process_relinquishment_responses: Updating grant state from {grant.state} to {new_state}',
-    )
-    grant.state = new_state
+        _remove_grant_from_response(response, session)
+        return
+
+    # FIXME This code is not unit-tested
+    grant = _get_grant_from_response(response, session)
+    _update_grant_from_response(response, grant)
 
 
 def process_deregistration_response(obj: ResponseDBProcessor, response: DBResponse, session: Session) -> None:
@@ -301,32 +282,52 @@ def unset_frequency(grant: DBGrant):
     frequencies[bw_index] = frequencies[bw_index] & ~(1 << int(bit_to_unset))  # noqa: WPS465
 
 
-def _get_or_create_grant_from_response(
-    obj: ResponseDBProcessor,
-    response: DBResponse,
-    session: Session,
+def _get_grant_from_response(
+        response: DBResponse,
+        session: Session,
 ) -> Optional[DBGrant]:
-    cbsd_id = response.payload.get(
-        CBSD_ID,
-    ) or response.request.payload.get(CBSD_ID)
-    grant_id = response.payload.get(
-        GRANT_ID,
-    ) or response.request.payload.get(GRANT_ID)
-    cbsd = session.query(DBCbsd).filter(DBCbsd.cbsd_id == cbsd_id).scalar()
-    grant = None
-    if grant_id:
-        logger.info(f'Getting grant by: {cbsd_id=} {grant_id=}')
-        grant = session.query(DBGrant).filter(
-            DBGrant.cbsd_id == cbsd.id, DBGrant.grant_id == grant_id,
-        ).scalar()
+    cbsd_id = response.cbsd_id
+    grant_id = response.grant_id
+    if not grant_id:
+        return None
 
-    if grant_id and not grant:
-        grant_idle_state = obj.grant_states_map[GrantStates.IDLE.value]
-        grant = DBGrant(cbsd=cbsd, grant_id=grant_id, state=grant_idle_state)
-        _update_grant_from_request(response, grant)
-        session.add(grant)
-        logger.info(f'Created new grant: {grant}')
+    grant = session.query(DBGrant). \
+        join(DBCbsd). \
+        filter(DBCbsd.cbsd_id == cbsd_id, DBGrant.grant_id == grant_id). \
+        scalar()
     return grant
+
+
+def _create_grant_from_response(
+        response: DBResponse,
+        state: DBGrantState,
+        session: Session,
+        grant_id: str = None,
+) -> Optional[DBGrant]:
+    grant_id = grant_id or response.grant_id
+    if not grant_id:
+        return None
+    cbsd_id = session.query(DBCbsd.id).filter(DBCbsd.cbsd_id == response.cbsd_id)
+    grant = DBGrant(cbsd_id=cbsd_id.subquery(), grant_id=grant_id, state=state)
+    _update_grant_from_request(response, grant)
+    session.add(grant)
+
+    logger.info(f'Created new grant {grant}')
+    return grant
+
+
+def _remove_grant_from_response(
+        response: DBResponse, session: Session, unset_freq: bool = False,
+) -> None:
+    grant = _get_grant_from_response(response, session)
+    if not grant:
+        return
+
+    logger.info(f'Terminating grant {grant.grant_id}')
+
+    if unset_freq:
+        unset_frequency(grant)
+    session.delete(grant)
 
 
 def _update_grant_from_request(response: DBResponse, grant: DBGrant) -> None:
@@ -357,34 +358,41 @@ def _update_grant_from_response(response: DBResponse, grant: DBGrant) -> None:
 
 
 def _terminate_all_grants_from_response(response: DBResponse, session: Session) -> None:
-    cbsd_id = response.payload.get(
-        CBSD_ID,
-    ) or response.request.payload.get(CBSD_ID)
+    cbsd_id = response.cbsd_id
     if not cbsd_id:
         return
-    cbsd = session.query(DBCbsd).filter(DBCbsd.cbsd_id == cbsd_id).scalar()
-    if cbsd:
-        cbsd.grant_attempts = 0
-    logger.info(f'Terminating all grants for {cbsd_id=}')
-    session.query(DBGrant).filter(DBGrant.cbsd == cbsd).delete()
-    logger.info(f"Deleting all channels for {cbsd_id=}")
-    session.query(DBChannel).filter(DBChannel.cbsd == cbsd).delete()
+
+    with session.no_autoflush:
+        logger.info(f'Terminating all grants for {cbsd_id=}')
+        session.query(DBGrant).filter(
+            DBGrant.cbsd_id == DBCbsd.id, DBCbsd.cbsd_id == cbsd_id,
+        ).delete(synchronize_session=False)
+
+        logger.info(f"Deleting all channels for {cbsd_id=}")
+        session.query(DBCbsd).filter(DBCbsd.cbsd_id == cbsd_id).update({DBCbsd.channels: []})
+
+
+def _unsync_conflict_from_response(obj: ResponseDBProcessor, response: DBResponse, session: Session) -> None:
+    state = obj.grant_states_map[GrantStates.UNSYNC.value]
+
+    conflicts_ids = response.payload.get("response", {}).get("responseData", [])
+    existing_grants = session.query(DBGrant.grant_id).filter(DBGrant.grant_id.in_(conflicts_ids)).all()
+    existing_grants_ids = {g.grant_id for g in existing_grants}
+
+    for grant_id in conflicts_ids:
+        if grant_id in existing_grants_ids:
+            continue
+
+        _create_grant_from_response(response, state, session, grant_id=grant_id)
+        return
 
 
 def _unregister_cbsd(response: DBResponse, session: Session) -> None:
     payload = response.request.payload
-    cbsd = _find_cbsd_from_request(session, payload)
-    if not cbsd:
+    where = _get_cbsd_filter(payload)
+    if not where:
         return
+    state_id = session.query(DBCbsdState.id). \
+        filter(DBCbsdState.name == CbsdStates.UNREGISTERED.value)
     _terminate_all_grants_from_response(response, session)
-    _change_cbsd_state(cbsd, session, CbsdStates.UNREGISTERED.value)
-
-
-def _is_response_invalid_value_cbsd_id(response: DBResponse) -> bool:
-    if response.response_code != ResponseCodes.INVALID_VALUE.value:
-        return False
-
-    response_data = response.payload.get(
-        "response", {},
-    ).get("responseData", [])
-    return CBSD_ID in response_data
+    _update_cbsd(session, where, {"state_id": state_id.subquery()})

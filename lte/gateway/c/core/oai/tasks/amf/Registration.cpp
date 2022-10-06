@@ -225,18 +225,43 @@ status_code_e amf_proc_registration_request(
     }
   }
 
+  /* Implicit deregistartion of existing context should be triggered if
+   * same TMSI used and trigger fresh registration request*/
+  if (ies->guti) {
+    if (ies->m5gsregistrationtype != AMF_REGISTRATION_TYPE_PERIODIC_UPDATING) {
+      amf_app_desc_t* amf_app_desc_p = get_amf_nas_state(false);
+      if (amf_app_desc_p == NULL) {
+        OAILOG_WARNING(LOG_NAS_AMF, " amf_app_desc_p null, from %s\n",
+                       __FUNCTION__);
+        OAILOG_FUNC_RETURN(LOG_NAS_AMF, rc);
+      }
+      ue_m5gmm_context_s* guti_ue_mm_ctx = NULL;
+
+      guti_ue_mm_ctx = amf_ue_context_exists_guti(
+          &amf_app_desc_p->amf_ue_contexts, ies->guti);
+      if (guti_ue_mm_ctx) {
+        old_ue_id = guti_ue_mm_ctx->amf_ue_ngap_id;
+        if ((guti_ue_mm_ctx->mm_state == REGISTERED_CONNECTED) ||
+            (guti_ue_mm_ctx->mm_state == REGISTERED_IDLE)) {
+          amf_nas_proc_implicit_deregister_ue_ind(old_ue_id);
+        }
+      }
+    }
+  }
   if (!(is_nas_specific_procedure_registration_running(
           &ue_m5gmm_context->amf_context))) {
     amf_proc_create_procedure_registration_request(ue_m5gmm_context, ies);
   } else {
     /* Update the GUTI */
-    if (ies->guti) {
-      nas_amf_registration_proc_t* registration_proc =
-          get_nas_specific_procedure_registration(
-              &(ue_m5gmm_context->amf_context));
-
-      registration_proc->ies = ies;
+    nas_amf_registration_proc_t* registration_proc =
+        get_nas_specific_procedure_registration(
+            &(ue_m5gmm_context->amf_context));
+    if (registration_proc == NULL) {
+      OAILOG_WARNING(LOG_NAS_AMF, " Registration_proc null, from %s\n",
+                     __FUNCTION__);
+      OAILOG_FUNC_RETURN(LOG_NAS_AMF, rc);
     }
+    registration_proc->ies = ies;
   }
 
   /* If in a connected state REGISTRATION_REQUEST is received

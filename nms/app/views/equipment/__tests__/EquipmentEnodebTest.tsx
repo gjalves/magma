@@ -13,19 +13,17 @@
 import type {PromqlReturnObject} from '../../../../generated';
 
 import Enodeb from '../EquipmentEnodeb';
-import EnodebContext from '../../../components/context/EnodebContext';
+import EnodebContext from '../../../context/EnodebContext';
 import MagmaAPI from '../../../api/MagmaAPI';
-import MomentUtils from '@date-io/moment';
-import MuiStylesThemeProvider from '@material-ui/styles/ThemeProvider';
 import React from 'react';
 import defaultTheme from '../../../theme/default';
+import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
 import {EnodebInfo} from '../../../components/lte/EnodebUtils';
+import {LocalizationProvider} from '@mui/x-date-pickers';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
-import {MuiPickersUtilsProvider} from '@material-ui/pickers';
-import {MuiThemeProvider} from '@material-ui/core/styles';
-import {PaginatedEnodebs} from '../../../../generated';
+import {StyledEngineProvider, ThemeProvider} from '@mui/material/styles';
 import {mockAPI} from '../../../util/TestUtils';
-import {render, wait, waitFor} from '@testing-library/react';
+import {render, waitFor} from '@testing-library/react';
 
 jest.mock('axios');
 jest.mock('../../../hooks/useSnackbar');
@@ -51,13 +49,6 @@ describe('<Enodeb />', () => {
       MagmaAPI.metrics,
       'networksNetworkIdPrometheusQueryRangeGet',
       mockThroughput,
-    );
-
-    // TODO[TS-migration] Why is there a type mismatch here
-    mockAPI(
-      MagmaAPI.enodebs,
-      'lteNetworkIdEnodebsGet',
-      (enbInfo as unknown) as PaginatedEnodebs,
     );
   });
 
@@ -131,17 +122,19 @@ describe('<Enodeb />', () => {
 
   const Wrapper = () => (
     <MemoryRouter initialEntries={['/nms/mynetwork/enodeb']} initialIndex={0}>
-      <MuiPickersUtilsProvider utils={MomentUtils}>
-        <MuiThemeProvider theme={defaultTheme}>
-          <MuiStylesThemeProvider theme={defaultTheme}>
-            <EnodebContext.Provider value={enbCtx}>
-              <Routes>
-                <Route path="/nms/:networkId/enodeb/" element={<Enodeb />} />
-              </Routes>
-            </EnodebContext.Provider>
-          </MuiStylesThemeProvider>
-        </MuiThemeProvider>
-      </MuiPickersUtilsProvider>
+      <LocalizationProvider dateAdapter={AdapterDateFns}>
+        <StyledEngineProvider injectFirst>
+          <ThemeProvider theme={defaultTheme}>
+            <ThemeProvider theme={defaultTheme}>
+              <EnodebContext.Provider value={enbCtx}>
+                <Routes>
+                  <Route path="/nms/:networkId/enodeb/" element={<Enodeb />} />
+                </Routes>
+              </EnodebContext.Provider>
+            </ThemeProvider>
+          </ThemeProvider>
+        </StyledEngineProvider>
+      </LocalizationProvider>
     </MemoryRouter>
   );
 
@@ -177,7 +170,5 @@ describe('<Enodeb />', () => {
         new Date(currTime).toLocaleDateString(),
       );
     });
-    // TODO: The wait was needed as this test seems to be blinking.
-    await wait(undefined, {timeout: 42});
   });
 });

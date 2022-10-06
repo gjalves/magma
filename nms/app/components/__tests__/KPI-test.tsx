@@ -10,20 +10,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import EnodebContext, {EnodebContextType} from '../context/EnodebContext';
+import EnodebContext, {EnodebContextType} from '../../context/EnodebContext';
 import EnodebKPIs from '../EnodebKPIs';
-import GatewayContext from '../context/GatewayContext';
+import GatewayContext from '../../context/GatewayContext';
 import GatewayKPIs from '../GatewayKPIs';
 import MagmaAPI from '../../api/MagmaAPI';
-import MuiStylesThemeProvider from '@material-ui/styles/ThemeProvider';
 import React from 'react';
 import ServicingAccessGatewaysKPI from '../FEGServicingAccessGatewayKPIs';
 import defaultTheme from '../../theme/default';
 import {EnodebInfo} from '../lte/EnodebUtils';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
-import {MuiThemeProvider} from '@material-ui/core/styles';
+import {StyledEngineProvider, ThemeProvider} from '@mui/material/styles';
 import {mockAPI, mockAPIOnce} from '../../util/TestUtils';
-import {render, wait} from '@testing-library/react';
+import {render, waitFor} from '@testing-library/react';
 import type {EnodebState, FegLteNetwork, LteGateway} from '../../../generated';
 
 const mockFegLteNetworks: Array<string> = [
@@ -138,24 +137,24 @@ describe('<GatewaysKPIs />', () => {
 
     return (
       <MemoryRouter initialEntries={['/nms/mynetwork']} initialIndex={0}>
-        <MuiThemeProvider theme={defaultTheme}>
-          <MuiStylesThemeProvider theme={defaultTheme}>
-            <GatewayContext.Provider value={gatewayCtx}>
-              <Routes>
-                <Route path="/nms/:networkId" element={<GatewayKPIs />} />
-              </Routes>
-            </GatewayContext.Provider>
-          </MuiStylesThemeProvider>
-        </MuiThemeProvider>
+        <StyledEngineProvider injectFirst>
+          <ThemeProvider theme={defaultTheme}>
+            <ThemeProvider theme={defaultTheme}>
+              <GatewayContext.Provider value={gatewayCtx}>
+                <Routes>
+                  <Route path="/nms/:networkId" element={<GatewayKPIs />} />
+                </Routes>
+              </GatewayContext.Provider>
+            </ThemeProvider>
+          </ThemeProvider>
+        </StyledEngineProvider>
       </MemoryRouter>
     );
   };
   it('renders', async () => {
-    const {getByTestId} = render(<Wrapper />);
-    await wait();
-
-    expect(getByTestId('Connected')).toHaveTextContent('1');
-    expect(getByTestId('Disconnected')).toHaveTextContent('2');
+    const {findByTestId} = render(<Wrapper />);
+    expect(await findByTestId('Connected')).toHaveTextContent('1');
+    expect(await findByTestId('Disconnected')).toHaveTextContent('2');
   });
 });
 
@@ -209,15 +208,17 @@ describe('<EnodebKPIs />', () => {
   const Wrapper = () => {
     return (
       <MemoryRouter initialEntries={['/nms/mynetwork']} initialIndex={0}>
-        <MuiThemeProvider theme={defaultTheme}>
-          <MuiStylesThemeProvider theme={defaultTheme}>
-            <EnodebContext.Provider value={enodebCtx}>
-              <Routes>
-                <Route path="/nms/:networkId" element={<EnodebKPIs />} />
-              </Routes>
-            </EnodebContext.Provider>
-          </MuiStylesThemeProvider>
-        </MuiThemeProvider>
+        <StyledEngineProvider injectFirst>
+          <ThemeProvider theme={defaultTheme}>
+            <ThemeProvider theme={defaultTheme}>
+              <EnodebContext.Provider value={enodebCtx}>
+                <Routes>
+                  <Route path="/nms/:networkId" element={<EnodebKPIs />} />
+                </Routes>
+              </EnodebContext.Provider>
+            </ThemeProvider>
+          </ThemeProvider>
+        </StyledEngineProvider>
       </MemoryRouter>
     );
   };
@@ -266,24 +267,28 @@ describe('<ServicingAccessGatewaysKPI />', () => {
   const Wrapper = () => {
     return (
       <MemoryRouter initialEntries={['/nms/mynetwork']} initialIndex={0}>
-        <MuiThemeProvider theme={defaultTheme}>
-          <MuiStylesThemeProvider theme={defaultTheme}>
-            <Routes>
-              <Route
-                path="/nms/:networkId"
-                element={<ServicingAccessGatewaysKPI />}
-              />
-            </Routes>
-          </MuiStylesThemeProvider>
-        </MuiThemeProvider>
+        <StyledEngineProvider injectFirst>
+          <ThemeProvider theme={defaultTheme}>
+            <ThemeProvider theme={defaultTheme}>
+              <Routes>
+                <Route
+                  path="/nms/:networkId"
+                  element={<ServicingAccessGatewaysKPI />}
+                />
+              </Routes>
+            </ThemeProvider>
+          </ThemeProvider>
+        </StyledEngineProvider>
       </MemoryRouter>
     );
   };
   it('renders gateway count correctly', async () => {
     const {getByTestId} = render(<Wrapper />);
-    await wait();
-    // first get list of feg_lte networks
-    expect(MagmaAPI.federatedLTENetworks.fegLteGet).toHaveBeenCalledTimes(1);
+
+    await waitFor(() =>
+      // first get list of feg_lte networks
+      expect(MagmaAPI.federatedLTENetworks.fegLteGet).toHaveBeenCalledTimes(1),
+    );
     // get info about each feg_lte network
     expect(
       MagmaAPI.federatedLTENetworks.fegLteNetworkIdGet,

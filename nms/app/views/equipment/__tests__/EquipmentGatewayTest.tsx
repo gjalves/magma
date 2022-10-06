@@ -11,15 +11,15 @@
  * limitations under the License.
  */
 import Gateway from '../EquipmentGateway';
-import GatewayContext from '../../../components/context/GatewayContext';
+import GatewayContext from '../../../context/GatewayContext';
 import MagmaAPI from '../../../api/MagmaAPI';
-import MuiStylesThemeProvider from '@material-ui/styles/ThemeProvider';
 import React from 'react';
 import defaultTheme from '../../../theme/default';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
-import {MuiThemeProvider} from '@material-ui/core/styles';
-import {fireEvent, render, wait} from '@testing-library/react';
+import {StyledEngineProvider, ThemeProvider} from '@mui/material/styles';
 import {mockAPI} from '../../../util/TestUtils';
+import {render} from '../../../util/TestingLibrary';
+import {waitFor} from '@testing-library/react';
 import type {LteGateway, PromqlReturnObject} from '../../../../generated';
 
 jest.mock('../../../hooks/useSnackbar');
@@ -134,8 +134,8 @@ describe('<Gateway />', () => {
 
   const Wrapper = () => (
     <MemoryRouter initialEntries={['/nms/mynetwork/gateway']} initialIndex={0}>
-      <MuiThemeProvider theme={defaultTheme}>
-        <MuiStylesThemeProvider theme={defaultTheme}>
+      <StyledEngineProvider injectFirst>
+        <ThemeProvider theme={defaultTheme}>
           <GatewayContext.Provider
             value={{
               state: lteGateways,
@@ -147,19 +147,24 @@ describe('<Gateway />', () => {
               <Route path="/nms/:networkId/gateway/" element={<Gateway />} />
             </Routes>
           </GatewayContext.Provider>
-        </MuiStylesThemeProvider>
-      </MuiThemeProvider>
+        </ThemeProvider>
+      </StyledEngineProvider>
     </MemoryRouter>
   );
 
   it('renders', async () => {
-    const {getByTestId, getAllByRole, getAllByTitle} = render(<Wrapper />);
-    await wait();
+    const {
+      findByTestId,
+      getByTestId,
+      getAllByRole,
+      openActionsTableMenu,
+    } = render(<Wrapper />);
 
-    expect(
-      MagmaAPI.metrics.networksNetworkIdPrometheusQueryRangeGet,
-    ).toHaveBeenCalledTimes(1);
-
+    await waitFor(() =>
+      expect(
+        MagmaAPI.metrics.networksNetworkIdPrometheusQueryRangeGet,
+      ).toHaveBeenCalledTimes(1),
+    );
     expect(
       MagmaAPI.metrics.networksNetworkIdPrometheusQueryGet,
     ).toHaveBeenCalledTimes(3);
@@ -201,10 +206,7 @@ describe('<Gateway />', () => {
     );
 
     // click the actions button for gateway 0
-    const actionList = getAllByTitle('Actions');
-    expect(getByTestId('actions-menu')).not.toBeVisible();
-    fireEvent.click(actionList[0]);
-    await wait();
-    expect(getByTestId('actions-menu')).toBeVisible();
+    await openActionsTableMenu(0);
+    expect(await findByTestId('actions-menu')).toBeVisible();
   });
 });

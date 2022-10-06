@@ -1,0 +1,122 @@
+# Copyright 2022 The Magma Authors.
+
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@python_deps//:requirements.bzl", "requirement")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_filegroup", "pkg_mklink")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("//bazel:deb_build.bzl", "PY_DEST")
+load("//bazel:runfiles.bzl", "expand_runfiles")
+
+SCRIPTS = [
+    "loadtest_mobilityd",
+    "loadtest_pipelined",
+    "loadtest_sessiond",
+    "loadtest_subscriberdb",
+]
+
+expand_runfiles(
+    name = "scripts_expanded",
+    targets = [":{script}".format(script = script) for script in SCRIPTS],
+)
+
+[
+    pkg_mklink(
+        name = "{script}_symlink".format(script = script),
+        link_name = "/usr/local/bin/{script}.py".format(script = script),
+        target = "{dest}/load_tests/{script}.py".format(
+            dest = PY_DEST,
+            script = script,
+        ),
+    )
+    for script in SCRIPTS
+]
+
+pkg_filegroup(
+    name = "magma_lte_loadtest_scripts",
+    srcs = [":scripts_expanded"] +
+           ["{script}_symlink".format(script = script) for script in SCRIPTS],
+    prefix = PY_DEST,
+    visibility = ["//lte/gateway/release:__pkg__"],
+)
+
+MAGMA_ROOT = "../../../../"
+
+ORC8R_ROOT = "{}orc8r/gateway/python".format(MAGMA_ROOT)
+
+LTE_ROOT = "{}lte/gateway/python".format(MAGMA_ROOT)
+
+py_library(
+    name = "common",
+    srcs = ["common.py"],
+    deps = ["//lte/protos:subscriberdb_python_proto"],
+)
+
+py_binary(
+    name = "loadtest_mobilityd",
+    srcs = ["loadtest_mobilityd.py"],
+    imports = [
+        LTE_ROOT,
+        ORC8R_ROOT,
+    ],
+    legacy_create_init = False,
+    deps = [
+        ":common",
+        "//lte/gateway/python/magma/subscriberdb:sid",
+        "//lte/protos:mobilityd_python_grpc",
+        "//lte/protos:subscriberdb_python_grpc",
+        "//orc8r/gateway/python/magma/common:service_registry",
+        requirement("protobuf"),
+    ],
+)
+
+py_binary(
+    name = "loadtest_pipelined",
+    srcs = ["loadtest_pipelined.py"],
+    imports = [LTE_ROOT],
+    legacy_create_init = False,
+    deps = [
+        ":common",
+        "//lte/gateway/python/magma/pipelined:policy_converters",
+        "//lte/gateway/python/magma/subscriberdb:sid",
+        "//lte/gateway/python/scripts:pipelined_cli",
+        "//lte/protos:pipelined_python_proto",
+        requirement("protobuf"),
+    ],
+)
+
+py_binary(
+    name = "loadtest_sessiond",
+    srcs = ["loadtest_sessiond.py"],
+    imports = [LTE_ROOT],
+    legacy_create_init = False,
+    deps = [
+        ":common",
+        "//lte/protos:session_manager_python_proto",
+        requirement("protobuf"),
+    ],
+)
+
+py_binary(
+    name = "loadtest_subscriberdb",
+    srcs = ["loadtest_subscriberdb.py"],
+    imports = [
+        LTE_ROOT,
+        ORC8R_ROOT,
+    ],
+    legacy_create_init = False,
+    deps = [
+        ":common",
+        "//lte/gateway/python/magma/subscriberdb:sid",
+        "//lte/protos:subscriberdb_python_grpc",
+        "//orc8r/gateway/python/magma/common:service_registry",
+        requirement("protobuf"),
+    ],
+)

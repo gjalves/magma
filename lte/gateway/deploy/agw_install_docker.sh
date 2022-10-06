@@ -14,7 +14,7 @@ MODE=$1
 RERUN=0    # Set to 1 to skip network configuration and run ansible playbook only
 WHOAMI=$(whoami)
 MAGMA_USER="ubuntu"
-MAGMA_VERSION="${MAGMA_VERSION:-master}"
+MAGMA_VERSION="${MAGMA_VERSION:-v1.8}"
 GIT_URL="${GIT_URL:-https://github.com/magma/magma.git}"
 DEPLOY_PATH="/opt/magma/lte/gateway/deploy"
 
@@ -79,7 +79,8 @@ EOF
   fi
 
   alias python=python3
-  pip3 install ansible
+  # TODO GH13915 pinned for now because of breaking change in ansible-core 2.13.4
+  pip3 install ansible==5.0.1
 
   rm -rf /opt/magma/
   git clone "${GIT_URL}" /opt/magma

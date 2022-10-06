@@ -11,17 +11,16 @@
  * limitations under the License.
  */
 
-import FEGNetworkContext from '../../../components/context/FEGNetworkContext';
+import FEGNetworkContext from '../../../context/FEGNetworkContext';
 import FEGServicingAccessGatewaysTable from '../FEGServicingAccessGatewayTable';
 import MagmaAPI from '../../../api/MagmaAPI';
-import MuiStylesThemeProvider from '@material-ui/styles/ThemeProvider';
 import React from 'react';
 import defaultTheme from '../../../theme/default';
 import {AxiosResponse} from 'axios';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
-import {MuiThemeProvider} from '@material-ui/core/styles';
+import {StyledEngineProvider, ThemeProvider} from '@mui/material/styles';
 import {mockAPI} from '../../../util/TestUtils';
-import {render, wait} from '@testing-library/react';
+import {render, waitFor} from '@testing-library/react';
 import type {
   FegLteNetwork,
   FegNetwork,
@@ -172,55 +171,63 @@ describe('<ServicingAccessGatewaysInfo />', () => {
       <MemoryRouter
         initialEntries={['/nms/mynetwork/network']}
         initialIndex={0}>
-        <MuiThemeProvider theme={defaultTheme}>
-          <MuiStylesThemeProvider theme={defaultTheme}>
-            <FEGNetworkContext.Provider value={networkCtx}>
-              <Routes>
-                <Route
-                  path="/nms/:networkId/network/"
-                  element={<FEGServicingAccessGatewaysTable />}
-                />
-              </Routes>
-            </FEGNetworkContext.Provider>
-          </MuiStylesThemeProvider>
-        </MuiThemeProvider>
+        <StyledEngineProvider injectFirst>
+          <ThemeProvider theme={defaultTheme}>
+            <ThemeProvider theme={defaultTheme}>
+              <FEGNetworkContext.Provider value={networkCtx}>
+                <Routes>
+                  <Route
+                    path="/nms/:networkId/network/"
+                    element={<FEGServicingAccessGatewaysTable />}
+                  />
+                </Routes>
+              </FEGNetworkContext.Provider>
+            </ThemeProvider>
+          </ThemeProvider>
+        </StyledEngineProvider>
       </MemoryRouter>
     );
   };
 
   it('renders serviced access gateway table correctly', async () => {
     const {getAllByRole} = render(<Wrapper />);
-    await wait();
-    //first get list of feg_lte networks
-    expect(MagmaAPI.federatedLTENetworks.fegLteGet).toHaveBeenCalledTimes(1);
-    //get info about each feg_lte network
-    expect(
-      MagmaAPI.federatedLTENetworks.fegLteNetworkIdGet,
-    ).toHaveBeenCalledTimes(3);
-    expect(
-      MagmaAPI.federatedLTENetworks.fegLteNetworkIdGet,
-    ).toHaveBeenCalledWith({
-      networkId: mockFegLteNetwork1.id,
-    });
-    expect(
-      MagmaAPI.federatedLTENetworks.fegLteNetworkIdGet,
-    ).toHaveBeenCalledWith({
-      networkId: mockFegLteNetwork2.id,
-    });
-    expect(
-      MagmaAPI.federatedLTENetworks.fegLteNetworkIdGet,
-    ).toHaveBeenCalledWith({
-      networkId: mockFegLteNetwork3.id,
-    });
-    // only 2 of the 3 feg_lte networks are serviced by current network
-    expect(MagmaAPI.lteGateways.lteNetworkIdGatewaysGet).toHaveBeenCalledTimes(
-      2,
-    );
-    expect(MagmaAPI.lteGateways.lteNetworkIdGatewaysGet).toHaveBeenCalledWith({
-      networkId: mockFegLteNetwork1.id,
-    });
-    expect(MagmaAPI.lteGateways.lteNetworkIdGatewaysGet).toHaveBeenCalledWith({
-      networkId: mockFegLteNetwork3.id,
+
+    await waitFor(() => {
+      //first get list of feg_lte networks
+      expect(MagmaAPI.federatedLTENetworks.fegLteGet).toHaveBeenCalledTimes(1);
+      //get info about each feg_lte network
+      expect(
+        MagmaAPI.federatedLTENetworks.fegLteNetworkIdGet,
+      ).toHaveBeenCalledTimes(3);
+      expect(
+        MagmaAPI.federatedLTENetworks.fegLteNetworkIdGet,
+      ).toHaveBeenCalledWith({
+        networkId: mockFegLteNetwork1.id,
+      });
+      expect(
+        MagmaAPI.federatedLTENetworks.fegLteNetworkIdGet,
+      ).toHaveBeenCalledWith({
+        networkId: mockFegLteNetwork2.id,
+      });
+      expect(
+        MagmaAPI.federatedLTENetworks.fegLteNetworkIdGet,
+      ).toHaveBeenCalledWith({
+        networkId: mockFegLteNetwork3.id,
+      });
+      // only 2 of the 3 feg_lte networks are serviced by current network
+      expect(
+        MagmaAPI.lteGateways.lteNetworkIdGatewaysGet,
+      ).toHaveBeenCalledTimes(2);
+      expect(MagmaAPI.lteGateways.lteNetworkIdGatewaysGet).toHaveBeenCalledWith(
+        {
+          networkId: mockFegLteNetwork1.id,
+        },
+      );
+      expect(MagmaAPI.lteGateways.lteNetworkIdGatewaysGet).toHaveBeenCalledWith(
+        {
+          networkId: mockFegLteNetwork3.id,
+        },
+      );
     });
 
     const rowItems = getAllByRole('row');

@@ -41,6 +41,8 @@ To run all existing unit tests, run
 
 ## Run integration tests
 
+### Test setup
+
 CWF integration tests use 3 separate VMs listed below.
 `cwf/gateway/fabfile.py` can be used to automate all setup work.
 

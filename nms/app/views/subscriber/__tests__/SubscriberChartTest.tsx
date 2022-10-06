@@ -12,18 +12,17 @@
  */
 
 import MagmaAPI from '../../../api/MagmaAPI';
-import MomentUtils from '@date-io/moment';
-import MuiStylesThemeProvider from '@material-ui/styles/ThemeProvider';
-import NetworkContext from '../../../components/context/NetworkContext';
+import NetworkContext from '../../../context/NetworkContext';
 import React from 'react';
 import SubscriberChart from '../SubscriberChart';
 import defaultTheme from '../../../theme/default';
+import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
+import {LocalizationProvider} from '@mui/x-date-pickers';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
-import {MuiPickersUtilsProvider} from '@material-ui/pickers';
-import {MuiThemeProvider} from '@material-ui/core/styles';
 import {PromqlReturnObject} from '../../../../generated';
+import {StyledEngineProvider, ThemeProvider} from '@mui/material/styles';
 import {mockAPI, mockAPIOnce} from '../../../util/TestUtils';
-import {render, wait} from '@testing-library/react';
+import {render} from '@testing-library/react';
 
 jest.mock('axios');
 jest.mock('../../../hooks/useSnackbar');
@@ -113,31 +112,33 @@ describe('<SubscriberChart />', () => {
           '/nms/test/subscribers/overview/config/IMSI001011234560000/overview',
         ]}
         initialIndex={0}>
-        <MuiPickersUtilsProvider utils={MomentUtils}>
-          <MuiThemeProvider theme={defaultTheme}>
-            <MuiStylesThemeProvider theme={defaultTheme}>
-              <NetworkContext.Provider
-                value={{
-                  networkId: 'test',
-                }}>
-                <Routes>
-                  <Route
-                    path="/nms/:networkId/subscribers/overview/config/:subscriberId/overview"
-                    element={<SubscriberChart />}
-                  />
-                </Routes>
-              </NetworkContext.Provider>
-            </MuiStylesThemeProvider>
-          </MuiThemeProvider>
-        </MuiPickersUtilsProvider>
+        <LocalizationProvider dateAdapter={AdapterDateFns}>
+          <StyledEngineProvider injectFirst>
+            <ThemeProvider theme={defaultTheme}>
+              <ThemeProvider theme={defaultTheme}>
+                <NetworkContext.Provider
+                  value={{
+                    networkId: 'test',
+                  }}>
+                  <Routes>
+                    <Route
+                      path="/nms/:networkId/subscribers/overview/config/:subscriberId/overview"
+                      element={<SubscriberChart />}
+                    />
+                  </Routes>
+                </NetworkContext.Provider>
+              </ThemeProvider>
+            </ThemeProvider>
+          </StyledEngineProvider>
+        </LocalizationProvider>
       </MemoryRouter>
     );
   };
 
   it('Verify Subscribers Data KPI', async () => {
-    const {getByTestId} = render(<Wrapper />);
-    await wait();
-    expect(getByTestId('Hourly Usage MB/s')).toHaveTextContent('12.11');
+    const {getByTestId, findByTestId} = render(<Wrapper />);
+
+    expect(await findByTestId('Hourly Usage MB/s')).toHaveTextContent('12.11');
     expect(getByTestId('Daily Avg MB/s')).toHaveTextContent('2.21');
     expect(getByTestId('Monthly Avg Mb/s')).toHaveTextContent('0.05');
     expect(getByTestId('Yearly Avg Mb/s')).toHaveTextContent('0.00');

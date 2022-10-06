@@ -144,51 +144,6 @@ dp:
 
     affinity: {}
 
-  active_mode_controller:
-
-    nameOverride: ""
-    fullnameOverride: ""
-    enabled: true
-    name: active-mode-controller
-
-    image:
-      repository: active-mode-controller
-      tag: ""
-      pullPolicy: IfNotPresent
-
-    replicaCount: 1
-
-    imagePullSecrets: []
-
-    serviceAccount:
-      create: false
-      annotations: {}
-      name: ""
-
-    podAnnotations: {}
-    podSecurityContext: {}
-    securityContext: {}
-
-    extraEnv: {}
-    resources: {}
-    readinessProbe: {}
-    livenessProbe: {}
-
-    autoscaling:
-      enabled: false
-      minReplicas: 1
-      maxReplicas: 100
-      targetCPUUtilizationPercentage: 80
-
-    podDisruptionBudget:
-      enabled: false
-      minAvailable: 1
-      maxUnavailable: ""
-
-    nodeSelector: {}
-    tolerations: []
-    affinity: {}
-
   db_service:
 
     database: {}
@@ -217,11 +172,6 @@ dp:
       name: ""
 
   fluentd:
-    image:
-      repository: fluentd
-      tag: ""
-      pullPolicy: IfNotPresent
-
     env:
       output_host: orc8r-fluentd-forward
       output_flush_interval: 1s

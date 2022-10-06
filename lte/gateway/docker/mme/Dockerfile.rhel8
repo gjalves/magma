@@ -10,8 +10,10 @@ ENV BUILD_TYPE=RelWithDebInfo
 ENV C_BUILD=/build/c
 ENV TZ=Europe/Paris
 # Copy RHEL certificates for builder image
-COPY tmp/entitlement/*.pem /etc/pki/entitlement
-COPY tmp/ca/redhat-uep.pem /etc/rhsm/ca
+COPY ./etc-pki-entitlement /etc/pki/entitlement
+# Copy the subscription manager configurations
+COPY ./rhsm-conf /etc/rhsm
+COPY ./rhsm-ca /etc/rhsm/ca
 
 RUN mkdir -p $C_BUILD
 
@@ -45,6 +47,8 @@ RUN rm /etc/rhsm-host && \
     protobuf-compiler \
     ruby \
     ruby-devel \
+    sqlite \
+    sqlite-devel \
   && ln -s /usr/bin/python3 /usr/bin/python \
   && ln -s /usr/bin/cmake3 /usr/bin/cmake
 
@@ -427,6 +431,7 @@ RUN yum update -y && \
       libubsan \
       libasan \
       liblsan \
+      sqlite \
       psmisc \
       procps-ng \
       tcpdump \

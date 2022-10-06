@@ -21,9 +21,13 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "lte/gateway/c/core/oai/lib/hashtable/hashtable.h"
 #include "lte/gateway/c/core/oai/include/mme_config.h"
+#ifdef __cplusplus
+}
+#endif
+
+namespace magma {
+namespace lte {
 
 int s1ap_state_init(uint32_t max_ues, uint32_t max_enbs, bool use_stateless);
 
@@ -33,15 +37,15 @@ s1ap_state_t* get_s1ap_state(bool read_from_db);
 
 void put_s1ap_state(void);
 
-enb_description_t* s1ap_state_get_enb(s1ap_state_t* state,
-                                      sctp_assoc_id_t assoc_id);
+oai::EnbDescription* s1ap_state_get_enb(s1ap_state_t* state,
+                                        sctp_assoc_id_t assoc_id);
 
-ue_description_t* s1ap_state_get_ue_enbid(sctp_assoc_id_t sctp_assoc_id,
-                                          enb_ue_s1ap_id_t enb_ue_s1ap_id);
+oai::UeDescription* s1ap_state_get_ue_enbid(sctp_assoc_id_t sctp_assoc_id,
+                                            enb_ue_s1ap_id_t enb_ue_s1ap_id);
 
-ue_description_t* s1ap_state_get_ue_mmeid(mme_ue_s1ap_id_t mme_ue_s1ap_id);
+oai::UeDescription* s1ap_state_get_ue_mmeid(mme_ue_s1ap_id_t mme_ue_s1ap_id);
 
-ue_description_t* s1ap_state_get_ue_imsi(imsi64_t imsi64);
+oai::UeDescription* s1ap_state_get_ue_imsi(imsi64_t imsi64);
 
 /**
  * Return unique composite id for S1AP UE context
@@ -62,7 +66,7 @@ void put_s1ap_imsi_map(void);
  */
 s1ap_imsi_map_t* get_s1ap_imsi_map(void);
 
-hash_table_ts_t* get_s1ap_ue_state(void);
+map_uint64_ue_description_t* get_s1ap_ue_state(void);
 
 int read_s1ap_ue_state_db(void);
 
@@ -70,18 +74,18 @@ void put_s1ap_ue_state(imsi64_t imsi64);
 
 void delete_s1ap_ue_state(imsi64_t imsi64);
 
-bool s1ap_ue_compare_by_mme_ue_id_cb(__attribute__((unused)) hash_key_t keyP,
-                                     void* elementP, void* parameterP,
-                                     void** resultP);
+bool s1ap_ue_compare_by_mme_ue_id_cb(__attribute__((unused)) uint64_t keyP,
+                                     oai::UeDescription* elementP,
+                                     void* parameterP, void** resultP);
 
-bool s1ap_ue_compare_by_imsi(__attribute__((unused)) hash_key_t keyP,
-                             void* elementP, void* parameterP, void** resultP);
+bool s1ap_ue_compare_by_imsi(__attribute__((unused)) uint64_t keyP,
+                             oai::UeDescription* elementP, void* parameterP,
+                             void** resultP);
 
 void remove_ues_without_imsi_from_ue_id_coll(void);
 
 void clean_stale_enb_state(s1ap_state_t* state,
-                           enb_description_t* new_enb_association);
+                           oai::EnbDescription* new_enb_association);
 
-#ifdef __cplusplus
-}
-#endif
+}  // namespace lte
+}  // namespace magma

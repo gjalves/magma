@@ -19,6 +19,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 
 	"magma/dp/cloud/go/services/dp/storage/db"
+	"magma/orc8r/cloud/go/clock"
 	"magma/orc8r/cloud/go/sqorc"
 	"magma/orc8r/lib/go/merrors"
 )
@@ -26,11 +27,12 @@ import (
 type CbsdManager interface {
 	CreateCbsd(networkId string, data *MutableCbsd) error
 	UpdateCbsd(networkId string, id int64, data *MutableCbsd) error
-	EnodebdUpdateCbsd(data *DBCbsd) (*DBCbsd, error)
+	EnodebdUpdateCbsd(data *DBCbsd) (*DetailedCbsd, error)
 	DeleteCbsd(networkId string, id int64) error
 	FetchCbsd(networkId string, id int64) (*DetailedCbsd, error)
 	ListCbsd(networkId string, pagination *Pagination, filter *CbsdFilter) (*DetailedCbsdList, error)
 	DeregisterCbsd(networkId string, id int64) error
+	RelinquishCbsd(networkId string, id int64) error
 }
 
 type CbsdFilter struct {
@@ -51,26 +53,28 @@ type DetailedCbsd struct {
 	Cbsd         *DBCbsd
 	CbsdState    *DBCbsdState
 	DesiredState *DBCbsdState
-	Grant        *DBGrant
-	GrantState   *DBGrantState
+	Grants       []*DetailedGrant
+}
+
+type DetailedGrant struct {
+	Grant      *DBGrant
+	GrantState *DBGrantState
 }
 
 func NewCbsdManager(db *sql.DB, builder sqorc.StatementBuilder, errorChecker sqorc.ErrorChecker, locker sqorc.Locker) *cbsdManager {
 	return &cbsdManager{
-		db:           db,
-		builder:      builder,
-		cache:        &enumCache{cache: map[string]map[string]int64{}},
-		errorChecker: errorChecker,
-		locker:       locker,
+		&dpManager{
+			db:           db,
+			builder:      builder,
+			cache:        &enumCache{cache: map[string]map[string]int64{}},
+			errorChecker: errorChecker,
+			locker:       locker,
+		},
 	}
 }
 
 type cbsdManager struct {
-	db           *sql.DB
-	builder      sqorc.StatementBuilder
-	cache        *enumCache
-	errorChecker sqorc.ErrorChecker
-	locker       sqorc.Locker
+	*dpManager
 }
 
 type enumCache struct {
@@ -79,7 +83,7 @@ type enumCache struct {
 
 func (c *cbsdManager) CreateCbsd(networkId string, data *MutableCbsd) error {
 	_, err := sqorc.ExecInTx(c.db, nil, nil, func(tx *sql.Tx) (interface{}, error) {
-		runner := c.getInTransactionManager(tx)
+		runner := c.getQueryRunner(tx)
 		err := runner.createCbsd(networkId, data)
 		return nil, err
 	})
@@ -88,26 +92,34 @@ func (c *cbsdManager) CreateCbsd(networkId string, data *MutableCbsd) error {
 
 func (c *cbsdManager) UpdateCbsd(networkId string, id int64, data *MutableCbsd) error {
 	_, err := sqorc.ExecInTx(c.db, nil, nil, func(tx *sql.Tx) (interface{}, error) {
-		runner := c.getInTransactionManager(tx)
+		runner := c.getQueryRunner(tx)
 		err := runner.updateCbsd(networkId, id, data)
 		return nil, err
 	})
 	return makeError(err, c.errorChecker)
 }
 
-func (c *cbsdManager) EnodebdUpdateCbsd(data *DBCbsd) (*DBCbsd, error) {
-	cbsd, err := sqorc.ExecInTx(c.db, nil, nil, func(tx *sql.Tx) (interface{}, error) {
-		runner := c.getInTransactionManager(tx)
-		cbsd, err := runner.enodebdUpdateCbsd(data)
-		return cbsd, err
+func (c *cbsdManager) EnodebdUpdateCbsd(data *DBCbsd) (*DetailedCbsd, error) {
+	grantJoinClause := getGrantJoinClauseForEnodebdUpdate()
+	result, err := sqorc.ExecInTx(c.db, nil, nil, func(tx *sql.Tx) (interface{}, error) {
+		runner := c.getQueryRunner(tx)
+		err := runner.enodebdUpdateCbsd(data)
+		if err != nil {
+			return nil, err
+		}
+		return runner.fetchDetailedCbsd(sq.Eq{"cbsd_serial_number": data.CbsdSerialNumber}, grantJoinClause)
 	})
-	return cbsd.(*DBCbsd), makeError(err, c.errorChecker)
+	if err != nil {
+		return nil, makeError(err, c.errorChecker)
+	}
+	return result.(*DetailedCbsd), nil
 }
 
 func (c *cbsdManager) DeleteCbsd(networkId string, id int64) error {
 	_, err := sqorc.ExecInTx(c.db, nil, nil, func(tx *sql.Tx) (interface{}, error) {
-		runner := c.getInTransactionManager(tx)
-		err := runner.markCbsdAsDeleted(networkId, id)
+		runner := c.getQueryRunner(tx)
+		data := &DBCbsd{IsDeleted: db.MakeBool(true)}
+		err := runner.updateField(networkId, id, "is_deleted", data)
 		return nil, err
 	})
 	return makeError(err, c.errorChecker)
@@ -115,8 +127,9 @@ func (c *cbsdManager) DeleteCbsd(networkId string, id int64) error {
 
 func (c *cbsdManager) FetchCbsd(networkId string, id int64) (*DetailedCbsd, error) {
 	cbsd, err := sqorc.ExecInTx(c.db, nil, nil, func(tx *sql.Tx) (interface{}, error) {
-		runner := c.getInTransactionManager(tx)
-		return runner.fetchDetailedCbsd(networkId, id)
+		runner := c.getQueryRunner(tx)
+		grantJoinClause := db.On(GrantTable, "state_id", GrantStateTable, "id")
+		return runner.fetchDetailedCbsd(getCbsdFiltersWithId(networkId, id), grantJoinClause)
 	})
 	if err != nil {
 		return nil, makeError(err, c.errorChecker)
@@ -126,7 +139,7 @@ func (c *cbsdManager) FetchCbsd(networkId string, id int64) (*DetailedCbsd, erro
 
 func (c *cbsdManager) ListCbsd(networkId string, pagination *Pagination, filter *CbsdFilter) (*DetailedCbsdList, error) {
 	cbsds, err := sqorc.ExecInTx(c.db, nil, nil, func(tx *sql.Tx) (interface{}, error) {
-		runner := c.getInTransactionManager(tx)
+		runner := c.getQueryRunner(tx)
 		return runner.listDetailedCbsd(networkId, pagination, filter)
 	})
 	if err != nil {
@@ -137,33 +150,30 @@ func (c *cbsdManager) ListCbsd(networkId string, pagination *Pagination, filter 
 
 func (c *cbsdManager) DeregisterCbsd(networkId string, id int64) error {
 	_, err := sqorc.ExecInTx(c.db, nil, nil, func(tx *sql.Tx) (interface{}, error) {
-		runner := c.getInTransactionManager(tx)
-		err := runner.markCbsdAsUpdated(networkId, id)
+		runner := c.getQueryRunner(tx)
+		data := &DBCbsd{ShouldDeregister: db.MakeBool(true)}
+		err := runner.updateField(networkId, id, "should_deregister", data)
 		return nil, err
 	})
 	return makeError(err, c.errorChecker)
 }
 
-func (c *cbsdManager) getInTransactionManager(tx sq.BaseRunner) *cbsdManagerInTransaction {
-	return &cbsdManagerInTransaction{
-		builder: c.builder.RunWith(tx),
-		cache:   c.cache,
-		locker:  c.locker,
-	}
+func (c *cbsdManager) RelinquishCbsd(networkId string, id int64) error {
+	_, err := sqorc.ExecInTx(c.db, nil, nil, func(tx *sql.Tx) (interface{}, error) {
+		runner := c.getQueryRunner(tx)
+		data := &DBCbsd{ShouldRelinquish: db.MakeBool(true)}
+		err := runner.updateField(networkId, id, "should_relinquish", data)
+		return nil, err
+	})
+	return makeError(err, c.errorChecker)
 }
 
-type cbsdManagerInTransaction struct {
-	builder sq.StatementBuilderType
-	cache   *enumCache
-	locker  sqorc.Locker
-}
-
-func (c *cbsdManagerInTransaction) createCbsd(networkId string, data *MutableCbsd) error {
-	unregisteredState, err := c.cache.getValue(c.builder, &DBCbsdState{}, "unregistered")
+func (r *queryRunner) createCbsd(networkId string, data *MutableCbsd) error {
+	unregisteredState, err := r.cache.getValue(r.builder, &DBCbsdState{}, "unregistered")
 	if err != nil {
 		return err
 	}
-	desiredState, err := c.cache.getValue(c.builder, &DBCbsdState{}, data.DesiredState.Name.String)
+	desiredState, err := r.cache.getValue(r.builder, &DBCbsdState{}, data.DesiredState.Name.String)
 	if err != nil {
 		return err
 	}
@@ -173,7 +183,7 @@ func (c *cbsdManagerInTransaction) createCbsd(networkId string, data *MutableCbs
 	columns := append(getCbsdWriteFields(), "state_id", "network_id")
 	mask := db.NewIncludeMask(columns...)
 	_, err = db.NewQuery().
-		WithBuilder(c.builder).
+		WithBuilder(r.builder).
 		From(data.Cbsd).
 		Insert(mask)
 	return err
@@ -214,17 +224,17 @@ func getCbsdWriteFields() []string {
 
 func getEnodebdWritableFields() []string {
 	return []string{
-		"antenna_gain", "cbsd_category", "latitude_deg", "longitude_deg",
+		"cbsd_category", "latitude_deg", "longitude_deg",
 		"height_m", "height_type", "indoor_deployment", "cpi_digital_signature",
 	}
 }
 
-func (c *cbsdManagerInTransaction) updateCbsd(networkId string, id int64, data *MutableCbsd) error {
+func (r *queryRunner) updateCbsd(networkId string, id int64, data *MutableCbsd) error {
 	mask := db.NewIncludeMask("id")
-	if _, err := c.selectForUpdateIfCbsdExists(mask, getCbsdFiltersWithId(networkId, id)); err != nil {
+	if _, err := r.selectForUpdateIfCbsdExists(mask, getCbsdFiltersWithId(networkId, id)); err != nil {
 		return err
 	}
-	desiredState, err := c.cache.getValue(c.builder, &DBCbsdState{}, data.DesiredState.Name.String)
+	desiredState, err := r.cache.getValue(r.builder, &DBCbsdState{}, data.DesiredState.Name.String)
 	if err != nil {
 		return err
 	}
@@ -233,7 +243,7 @@ func (c *cbsdManagerInTransaction) updateCbsd(networkId string, id int64, data *
 	columns := append(getCbsdWriteFields(), "should_deregister")
 	mask = db.NewIncludeMask(columns...)
 	_, err = db.NewQuery().
-		WithBuilder(c.builder).
+		WithBuilder(r.builder).
 		From(data.Cbsd).
 		Select(db.NewIncludeMask()).
 		Where(sq.Eq{"id": id}).
@@ -241,37 +251,42 @@ func (c *cbsdManagerInTransaction) updateCbsd(networkId string, id int64, data *
 	return err
 }
 
-func (c *cbsdManagerInTransaction) enodebdUpdateCbsd(data *DBCbsd) (*DBCbsd, error) {
+func (r *queryRunner) enodebdUpdateCbsd(data *DBCbsd) error {
 	identifiers := []string{"cbsd_serial_number", "network_id"}
 	maskFields := append(identifiers, getEnodebdWritableFields()...)
 	mask := db.NewIncludeMask(maskFields...)
 	filters := sq.Eq{"cbsd_serial_number": data.CbsdSerialNumber}
-	cbsd, err := c.selectForUpdateIfCbsdExists(mask, filters)
+	cbsd, err := r.selectForUpdateIfCbsdExists(mask, filters)
+
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if !ShouldENodeBDUpdate(cbsd, data) {
-		return cbsd, nil
+
+	columns := []string{"last_seen"}
+
+	if ShouldEnodebdUpdateInstallationParams(cbsd, data) {
+		cols := append(getEnodebdWritableFields(), "should_deregister")
+		columns = append(columns, cols...)
+		data.ShouldDeregister = db.MakeBool(true)
 	}
-	data.ShouldDeregister = db.MakeBool(true)
-	columns := append(getEnodebdWritableFields(), "should_deregister")
-	models, err := db.NewQuery().
-		WithBuilder(c.builder).
+
+	_, err = db.NewQuery().
+		WithBuilder(r.builder).
 		From(data).
-		Select(db.NewIncludeMask(identifiers...)).
+		Select(db.NewIncludeMask("id")).
 		Where(filters).
 		Update(db.NewIncludeMask(columns...))
-	updated := models[0].(*DBCbsd)
-	return updated, err
+
+	return err
 }
 
-func (c *cbsdManagerInTransaction) selectForUpdateIfCbsdExists(mask db.FieldMask, filters sq.Eq) (*DBCbsd, error) {
+func (r *queryRunner) selectForUpdateIfCbsdExists(mask db.FieldMask, filters sq.Eq) (*DBCbsd, error) {
 	res, err := db.NewQuery().
-		WithBuilder(c.builder).
+		WithBuilder(r.builder).
 		From(&DBCbsd{}).
 		Select(mask).
 		Where(filters).
-		Lock(c.locker.WithLock()).
+		Lock(r.locker.WithLock()).
 		Fetch()
 	if err != nil {
 		return nil, err
@@ -279,15 +294,15 @@ func (c *cbsdManagerInTransaction) selectForUpdateIfCbsdExists(mask db.FieldMask
 	return res[0].(*DBCbsd), nil
 }
 
-func (c *cbsdManagerInTransaction) markCbsdAsDeleted(networkId string, id int64) error {
+func (r *queryRunner) updateField(networkId string, id int64, field string, data *DBCbsd) error {
 	mask := db.NewIncludeMask("id")
-	if _, err := c.selectForUpdateIfCbsdExists(mask, getCbsdFiltersWithId(networkId, id)); err != nil {
+	if _, err := r.selectForUpdateIfCbsdExists(mask, getCbsdFiltersWithId(networkId, id)); err != nil {
 		return err
 	}
-	mask = db.NewIncludeMask("is_deleted")
+	mask = db.NewIncludeMask(field)
 	_, err := db.NewQuery().
-		WithBuilder(c.builder).
-		From(&DBCbsd{IsDeleted: db.MakeBool(true)}).
+		WithBuilder(r.builder).
+		From(data).
 		Select(db.NewIncludeMask()).
 		Where(sq.Eq{"id": id}).
 		Update(mask)
@@ -297,41 +312,25 @@ func (c *cbsdManagerInTransaction) markCbsdAsDeleted(networkId string, id int64)
 	return nil
 }
 
-func (c *cbsdManagerInTransaction) markCbsdAsUpdated(networkId string, id int64) error {
-	mask := db.NewIncludeMask("id")
-	if _, err := c.selectForUpdateIfCbsdExists(mask, getCbsdFiltersWithId(networkId, id)); err != nil {
-		return err
-	}
-	mask = db.NewIncludeMask("should_deregister")
-	_, err := db.NewQuery().
-		WithBuilder(c.builder).
-		From(&DBCbsd{ShouldDeregister: db.MakeBool(true)}).
-		Select(mask).
-		Where(sq.Eq{"id": id}).
-		Update(mask)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *cbsdManagerInTransaction) fetchDetailedCbsd(networkId string, id int64) (*DetailedCbsd, error) {
-	res, err := buildDetailedCbsdQuery(c.builder).
-		Where(getCbsdFiltersWithId(networkId, id)).
+func (r *queryRunner) fetchDetailedCbsd(filter sq.Eq, grantJoinClause sq.Sqlizer) (*DetailedCbsd, error) {
+	rawCbsd, err := buildDetailedCbsdQuery(r.builder).
+		Where(filter).
 		Fetch()
 	if err != nil {
 		return nil, err
 	}
-	return convertToDetails(res), nil
+	cbsd := convertCbsdToDetails(rawCbsd)
+	if err := getGrantsForCbsds(r.builder, grantJoinClause, cbsd); err != nil {
+		return nil, err
+	}
+	return cbsd, nil
 }
 
-func convertToDetails(models []db.Model) *DetailedCbsd {
+func convertCbsdToDetails(models []db.Model) *DetailedCbsd {
 	return &DetailedCbsd{
 		Cbsd:         models[0].(*DBCbsd),
 		CbsdState:    models[1].(*DBCbsdState),
 		DesiredState: models[2].(*DBCbsdState),
-		Grant:        models[3].(*DBGrant),
-		GrantState:   models[4].(*DBGrantState),
 	}
 }
 
@@ -339,8 +338,10 @@ func buildDetailedCbsdQuery(builder sq.StatementBuilderType) *db.Query {
 	return db.NewQuery().
 		WithBuilder(builder).
 		From(&DBCbsd{}).
-		Select(db.NewExcludeMask("network_id", "state_id", "desired_state_id",
-			"is_deleted", "should_deregister", "grant_attempts")).
+		Select(db.NewExcludeMask(
+			"state_id", "desired_state_id",
+			"is_deleted", "should_deregister", "should_relinquish",
+			"available_frequencies", "channels")).
 		Join(db.NewQuery().
 			From(&DBCbsdState{}).
 			As("t1").
@@ -350,29 +351,53 @@ func buildDetailedCbsdQuery(builder sq.StatementBuilderType) *db.Query {
 			From(&DBCbsdState{}).
 			As("t2").
 			On(db.On(CbsdTable, "desired_state_id", "t2", "id")).
-			Select(db.NewIncludeMask("name"))).
-		Join(db.NewQuery().
-			From(&DBGrant{}).
-			On(db.On(CbsdTable, "id", GrantTable, "cbsd_id")).
-			Select(db.NewIncludeMask(
-				"grant_expire_time", "transmit_expire_time",
-				"low_frequency", "high_frequency", "max_eirp")).
-			Join(db.NewQuery().
-				From(&DBGrantState{}).
-				On(sq.And{
-					db.On(GrantTable, "state_id", GrantStateTable, "id"),
-					sq.NotEq{GrantStateTable + ".name": "idle"},
-				}).
-				Select(db.NewIncludeMask("name"))).
-			Nullable())
+			Select(db.NewIncludeMask("name")))
 }
 
-func (c *cbsdManagerInTransaction) listDetailedCbsd(networkId string, pagination *Pagination, filter *CbsdFilter) (*DetailedCbsdList, error) {
-	count, err := countCbsds(networkId, filter, c.builder)
+func getGrantsForCbsds(builder sq.StatementBuilderType, grantJoinClause sq.Sqlizer, cbsds ...*DetailedCbsd) error {
+	idList, idMap := make([]int64, len(cbsds)), make(map[int64]*DetailedCbsd, len(cbsds))
+	for i, c := range cbsds {
+		idList[i] = c.Cbsd.Id.Int64
+		idMap[c.Cbsd.Id.Int64] = c
+	}
+	rawGrants, err := buildDetailedGrantQuery(builder, grantJoinClause).
+		Where(sq.Eq{"cbsd_id": idList}).
+		OrderBy(GrantTable+".low_frequency", db.OrderAsc).
+		List()
+	if err != nil {
+		return err
+	}
+	for _, models := range rawGrants {
+		g := &DetailedGrant{
+			Grant:      models[0].(*DBGrant),
+			GrantState: models[1].(*DBGrantState),
+		}
+		c := idMap[g.Grant.CbsdId.Int64]
+		g.Grant.CbsdId = sql.NullInt64{}
+		c.Grants = append(c.Grants, g)
+	}
+	return nil
+}
+
+func buildDetailedGrantQuery(builder sq.StatementBuilderType, on sq.Sqlizer) *db.Query {
+	return db.NewQuery().
+		WithBuilder(builder).
+		From(&DBGrant{}).
+		Select(db.NewIncludeMask(
+			"cbsd_id", "grant_expire_time", "transmit_expire_time",
+			"low_frequency", "high_frequency", "max_eirp")).
+		Join(db.NewQuery().
+			From(&DBGrantState{}).
+			On(on).
+			Select(db.NewIncludeMask("name")))
+}
+
+func (r *queryRunner) listDetailedCbsd(networkId string, pagination *Pagination, filter *CbsdFilter) (*DetailedCbsdList, error) {
+	count, err := countCbsds(networkId, filter, r.builder)
 	if err != nil {
 		return nil, err
 	}
-	query := buildDetailedCbsdQuery(c.builder)
+	query := buildDetailedCbsdQuery(r.builder)
 	res, err := buildPagination(query, pagination).
 		Where(getCbsdFilters(networkId, filter)).
 		OrderBy(CbsdTable+".id", db.OrderAsc).
@@ -382,7 +407,11 @@ func (c *cbsdManagerInTransaction) listDetailedCbsd(networkId string, pagination
 	}
 	cbsds := make([]*DetailedCbsd, len(res))
 	for i, models := range res {
-		cbsds[i] = convertToDetails(models)
+		cbsds[i] = convertCbsdToDetails(models)
+	}
+	on := db.On(GrantTable, "state_id", GrantStateTable, "id")
+	if err := getGrantsForCbsds(r.builder, on, cbsds...); err != nil {
+		return nil, err
 	}
 	return &DetailedCbsdList{
 		Cbsds: cbsds,
@@ -422,4 +451,19 @@ func getCbsdFilters(networkId string, filter *CbsdFilter) sq.Eq {
 		}
 	}
 	return filters
+}
+
+func getGrantJoinClauseForEnodebdUpdate() sq.Sqlizer {
+	return sq.And{
+		db.On(GrantTable, "state_id", GrantStateTable, "id"),
+		sq.Eq{GrantStateTable + ".name": "authorized"},
+		sq.Or{
+			sq.Eq{"transmit_expire_time": nil},
+			sq.Gt{"transmit_expire_time": db.MakeTime(clock.Now().UTC())},
+		},
+		sq.Or{
+			sq.Eq{"grant_expire_time": nil},
+			sq.Gt{"grant_expire_time": db.MakeTime(clock.Now().UTC())},
+		},
+	}
 }

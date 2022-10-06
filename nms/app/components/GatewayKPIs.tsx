@@ -11,9 +11,9 @@
  * limitations under the License.
  */
 
-import CellWifiIcon from '@material-ui/icons/CellWifi';
+import CellWifiIcon from '@mui/icons-material/CellWifi';
 import DataGrid from './DataGrid';
-import GatewayContext from './context/GatewayContext';
+import GatewayContext from '../context/GatewayContext';
 import React from 'react';
 import {LteGateway} from '../../generated';
 import {useContext} from 'react';

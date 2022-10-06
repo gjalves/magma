@@ -12,11 +12,11 @@
  */
 
 import ActionTable from '../../components/ActionTable';
-import Link from '@material-ui/core/Link';
+import Link from '@mui/material/Link';
 import LoadingFiller from '../../components/LoadingFiller';
 import React, {useEffect, useState} from 'react';
 import nullthrows from '../../../shared/util/nullthrows';
-import {FetchGateways} from '../../state/lte/EquipmentState';
+import {EnqueueSnackbar, useEnqueueSnackbar} from '../../hooks/useSnackbar';
 import {
   GatewayId,
   GatewayName,
@@ -24,11 +24,10 @@ import {
   NetworkName,
 } from '../../../shared/types/network';
 import {GatewayTypeEnum} from '../../components/GatewayUtils';
+import {fetchGateways} from '../../context/GatewayContext';
 import {getServicedAccessNetworks} from '../../components/FEGServicingAccessGatewayKPIs';
-import {useEnqueueSnackbar} from '../../hooks/useSnackbar';
 import {useParams} from 'react-router-dom';
 import type {FegLteNetwork} from '../../../generated';
-import type {OptionsObject} from 'notistack';
 
 type ServicingAccessGatewayRowType = {
   networkId: NetworkId;
@@ -50,15 +49,12 @@ type ServicingAccessGatewayRowType = {
  */
 async function getServicedAccessGatewaysInfo(
   servicedAccessNetworks: Array<FegLteNetwork>,
-  enqueueSnackbar: (
-    msg: string,
-    cfg: OptionsObject,
-  ) => string | number | null | undefined,
+  enqueueSnackbar: EnqueueSnackbar,
 ): Promise<Array<ServicingAccessGatewayRowType>> {
   const newServicedAccessGatewaysInfo: Array<ServicingAccessGatewayRowType> = [];
 
   for (const servicedAccessNetwork of servicedAccessNetworks) {
-    const servicedAccessGateways = await FetchGateways({
+    const servicedAccessGateways = await fetchGateways({
       networkId: servicedAccessNetwork.id,
       enqueueSnackbar,
     });
@@ -146,7 +142,8 @@ export default function ServicingAccessGatewayInfo() {
                   window.open(
                     `${window.location.origin}/nms/${currRow.networkId}/equipment/overview/gateway/${currRow.gatewayId}`,
                   );
-                }}>
+                }}
+                underline="hover">
                 {currRow.gatewayName}
               </Link>
             ),

@@ -1,4 +1,14 @@
----
+# Copyright 2022 The Magma Authors.
+#
+# This source code is licensed under the BSD-style license found in the
+# LICENSE file in the root directory of this source tree.
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 name: reviewdog-workflow
 on:
   pull_request_target:
@@ -127,6 +137,13 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           fetch-depth: 0
+      - name: setup node
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'
+      - name: install dependencies
+        run: yarn install
+        working-directory: 'nms/'
       - name: eslint
         uses: reviewdog/action-eslint@v1
         with:
@@ -187,7 +204,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           fetch-depth: 0
       - name: Run mypy with reviewdog
-        uses: tsuyoshicho/action-mypy@631cb44fa199efd4ed132c5005d4f5b08d7ac1e6 # pin@v3.6.0
+        uses: tsuyoshicho/action-mypy@176f65a2ad781202baffaf870e5715d768d799a8 # pin@v3.9.2
         with:
           github_token: ${{ secrets.github_token }}
           filter_mode: added

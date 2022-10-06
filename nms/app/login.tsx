@@ -11,19 +11,24 @@
  * limitations under the License.
  */
 
-import './common/axiosConfig';
-import './common/polyfill';
+import './util/axiosConfig';
+import './util/polyfill';
 
+import CssBaseline from '@mui/material/CssBaseline';
 import LoginForm from './views/login/LoginForm';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import ThemeProvider from '@material-ui/styles/ThemeProvider';
 import defaultTheme from './theme/default';
 import nullthrows from '../shared/util/nullthrows';
-import {AppContextProvider} from './components/context/AppContext';
+import {AppContextProvider} from './context/AppContext';
 import {BrowserRouter} from 'react-router-dom';
+import {StyledEngineProvider, ThemeProvider} from '@mui/material/styles';
+
+const LOGIN_ERROR_MESSAGE = 'Invalid email or password';
 
 function LoginWrapper() {
+  const params = new URLSearchParams(window.location.search);
+  const loginInvalid = params.get('invalid');
   return (
     <LoginForm
       action="/user/login"
@@ -31,6 +36,7 @@ function LoginWrapper() {
       ssoAction="/user/login/saml"
       ssoEnabled={window.CONFIG.appData.ssoEnabled}
       csrfToken={window.CONFIG.appData.csrfToken}
+      error={loginInvalid ? LOGIN_ERROR_MESSAGE : undefined}
     />
   );
 }
@@ -38,9 +44,12 @@ function LoginWrapper() {
 ReactDOM.render(
   <AppContextProvider>
     <BrowserRouter>
-      <ThemeProvider theme={defaultTheme}>
-        <LoginWrapper />
-      </ThemeProvider>
+      <StyledEngineProvider injectFirst>
+        <ThemeProvider theme={defaultTheme}>
+          <CssBaseline />
+          <LoginWrapper />
+        </ThemeProvider>
+      </StyledEngineProvider>
     </BrowserRouter>
   </AppContextProvider>,
   nullthrows(document.getElementById('root')),

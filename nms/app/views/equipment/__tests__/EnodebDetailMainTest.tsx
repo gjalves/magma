@@ -12,19 +12,19 @@
  */
 import type {PromqlReturnObject} from '../../../../generated';
 
-import EnodebContext from '../../../components/context/EnodebContext';
+import EnodebContext from '../../../context/EnodebContext';
 import EnodebDetail from '../EnodebDetailMain';
 import MagmaAPI from '../../../api/MagmaAPI';
-import MomentUtils from '@date-io/moment';
-import MuiStylesThemeProvider from '@material-ui/styles/ThemeProvider';
 import React from 'react';
 import defaultTheme from '../../../theme/default';
+import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
 import {EnodebInfo} from '../../../components/lte/EnodebUtils';
+import {LocalizationProvider} from '@mui/x-date-pickers';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
-import {MuiPickersUtilsProvider} from '@material-ui/pickers';
-import {MuiThemeProvider} from '@material-ui/core/styles';
+
+import {StyledEngineProvider, ThemeProvider} from '@mui/material/styles';
 import {mockAPI} from '../../../util/TestUtils';
-import {render, wait} from '@testing-library/react';
+import {render} from '@testing-library/react';
 
 jest.mock('../../../hooks/useSnackbar');
 
@@ -142,31 +142,31 @@ describe('<Enodeb />', () => {
       <MemoryRouter
         initialEntries={['/nms/mynetwork/enodeb/testEnodebSerial0/overview']}
         initialIndex={0}>
-        <MuiPickersUtilsProvider utils={MomentUtils}>
-          <MuiThemeProvider theme={defaultTheme}>
-            <MuiStylesThemeProvider theme={defaultTheme}>
-              <EnodebContext.Provider
-                value={{
-                  state: {enbInfo: enbInfo},
-                  setState: async () => {},
-                  refetch: () => {},
-                }}>
-                <Routes>
-                  <Route
-                    path="/nms/:networkId/enodeb/:enodebSerial/overview/*"
-                    element={<EnodebDetail />}
-                  />
-                </Routes>
-              </EnodebContext.Provider>
-            </MuiStylesThemeProvider>
-          </MuiThemeProvider>
-        </MuiPickersUtilsProvider>
+        <LocalizationProvider dateAdapter={AdapterDateFns}>
+          <StyledEngineProvider injectFirst>
+            <ThemeProvider theme={defaultTheme}>
+              <ThemeProvider theme={defaultTheme}>
+                <EnodebContext.Provider
+                  value={{
+                    state: {enbInfo: enbInfo},
+                    setState: async () => {},
+                    refetch: () => {},
+                  }}>
+                  <Routes>
+                    <Route
+                      path="/nms/:networkId/enodeb/:enodebSerial/overview/*"
+                      element={<EnodebDetail />}
+                    />
+                  </Routes>
+                </EnodebContext.Provider>
+              </ThemeProvider>
+            </ThemeProvider>
+          </StyledEngineProvider>
+        </LocalizationProvider>
       </MemoryRouter>
     );
-    const {getByTestId} = render(<Wrapper />);
-    await wait();
-
-    expect(getByTestId('eNodeB Serial Number')).toHaveTextContent(
+    const {findByTestId, getByTestId} = render(<Wrapper />);
+    expect(await findByTestId('eNodeB Serial Number')).toHaveTextContent(
       'testEnodebSerial0',
     );
     expect(getByTestId('eNodeB Externally Managed')).toHaveTextContent('False');
@@ -181,31 +181,32 @@ describe('<Enodeb />', () => {
       <MemoryRouter
         initialEntries={['/nms/mynetwork/enodeb/testEnodebSerial1/overview']}
         initialIndex={0}>
-        <MuiPickersUtilsProvider utils={MomentUtils}>
-          <MuiThemeProvider theme={defaultTheme}>
-            <MuiStylesThemeProvider theme={defaultTheme}>
-              <EnodebContext.Provider
-                value={{
-                  state: {enbInfo: enbInfo},
-                  setState: async () => {},
-                  refetch: () => {},
-                }}>
-                <Routes>
-                  <Route
-                    path="/nms/:networkId/enodeb/:enodebSerial/overview/*"
-                    element={<EnodebDetail />}
-                  />
-                </Routes>
-              </EnodebContext.Provider>
-            </MuiStylesThemeProvider>
-          </MuiThemeProvider>
-        </MuiPickersUtilsProvider>
+        <LocalizationProvider dateAdapter={AdapterDateFns}>
+          <StyledEngineProvider injectFirst>
+            <ThemeProvider theme={defaultTheme}>
+              <ThemeProvider theme={defaultTheme}>
+                <EnodebContext.Provider
+                  value={{
+                    state: {enbInfo: enbInfo},
+                    setState: async () => {},
+                    refetch: () => {},
+                  }}>
+                  <Routes>
+                    <Route
+                      path="/nms/:networkId/enodeb/:enodebSerial/overview/*"
+                      element={<EnodebDetail />}
+                    />
+                  </Routes>
+                </EnodebContext.Provider>
+              </ThemeProvider>
+            </ThemeProvider>
+          </StyledEngineProvider>
+        </LocalizationProvider>
       </MemoryRouter>
     );
-    const {getByTestId} = render(<Wrapper />);
-    await wait();
+    const {findByTestId, getByTestId} = render(<Wrapper />);
 
-    expect(getByTestId('eNodeB Serial Number')).toHaveTextContent(
+    expect(await findByTestId('eNodeB Serial Number')).toHaveTextContent(
       'testEnodebSerial1',
     );
     expect(getByTestId('eNodeB Externally Managed')).toHaveTextContent('True');

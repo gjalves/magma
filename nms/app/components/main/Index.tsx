@@ -18,21 +18,21 @@ import {
 } from '../../../shared/types/network';
 import {FEGContextProvider} from '../feg/FEGContext';
 import {LteContextProvider} from '../lte/LteContext';
-import {VersionContextProvider} from '../context/VersionContext';
+import {VersionContextProvider} from '../../context/VersionContext';
 import type {NetworkType} from '../../../shared/types/network';
-import type {Theme} from '@material-ui/core';
+import type {Theme} from '@mui/material';
 
 import * as React from 'react';
 import AppContent from '../layout/AppContent';
 import AppSideBar from '../AppSideBar';
-import NetworkContext from '../context/NetworkContext';
+import NetworkContext from '../../context/NetworkContext';
 import SectionRoutes from '../layout/SectionRoutes';
 import {useEffect, useState} from 'react';
 
 import LoadingFiller from '../LoadingFiller';
 import MagmaAPI from '../../api/MagmaAPI';
 import useSections from '../layout/useSections';
-import {makeStyles} from '@material-ui/styles';
+import {makeStyles} from '@mui/styles';
 import {useParams} from 'react-router-dom';
 
 // These won't be considered networkIds
@@ -113,7 +113,7 @@ function NetworkContextProvider(props: Props) {
     <VersionContextProvider>
       <NetworkContext.Provider value={{networkId, networkType}}>
         {networkType === FEG ? (
-          <FEGContextProvider networkId={networkId} networkType={networkType}>
+          <FEGContextProvider networkId={networkId}>
             {props.children}
           </FEGContextProvider>
         ) : (

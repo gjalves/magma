@@ -49,7 +49,10 @@
     state: restarted
 
 - name: Install ansible community collection
-  shell: su - {{ ansible_user }} -c 'ansible-galaxy collection install community.general'
+  become: yes
+  become_method: su
+  become_user: "{{ ansible_user }}"
+  command: ansible-galaxy collection install community.general
   ignore_errors: yes
 
 - name: Set build environment variables
@@ -67,7 +70,17 @@
     -  XDG_CACHE_HOME="{{magma_root}}/.cache"
     -  SWAGGER_CODEGEN_JAR={{ swagger_codegen_jar }}
     -  CODEGEN_ROOT={{ codegen_root }}
-    -  ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1
+    -  ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:fast_unwind_on_malloc=0
+    -  LSAN_OPTIONS=suppressions=/usr/local/suppressions.txt
+  when: full_provision
+
+- name: Create LSAN suppressions file
+  copy:
+    dest: "/usr/local/suppressions.txt"
+    content: |
+      leak:libczmq.so.4
+      leak:libzmq.so.5
+      leak:fluid_base::BaseOFConnection::OFReadBuffer::read_notify
   when: full_provision
 
 - name: "Go export"
@@ -433,10 +446,9 @@
       - unattended-upgrades
 
 - name: Install LLDB debugger
-  # TODO: Make this preburn
   apt:
     pkg: lldb
     state: present
     update_cache: no
   retries: 5
-  when: full_provision
+  when: preburn

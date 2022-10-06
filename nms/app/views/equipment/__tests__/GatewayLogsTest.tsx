@@ -14,15 +14,14 @@
 import * as customHistogram from '../../../components/CustomMetrics';
 import GatewayLogs from '../GatewayLogs';
 import MagmaAPI from '../../../api/MagmaAPI';
-import MomentUtils from '@date-io/moment';
-import MuiStylesThemeProvider from '@material-ui/styles/ThemeProvider';
 import React from 'react';
 import defaultTheme from '../../../theme/default';
+import {AdapterDateFns} from '@mui/x-date-pickers/AdapterDateFns';
+import {LocalizationProvider} from '@mui/x-date-pickers';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
-import {MuiPickersUtilsProvider} from '@material-ui/pickers';
-import {MuiThemeProvider} from '@material-ui/core/styles';
+import {StyledEngineProvider, ThemeProvider} from '@mui/material/styles';
 import {mockAPI} from '../../../util/TestUtils';
-import {render, wait} from '@testing-library/react';
+import {render, waitFor} from '@testing-library/react';
 
 jest.mock('../../../../app/hooks/useSnackbar');
 jest.spyOn(customHistogram, 'default').mockImplementation(() => <></>);
@@ -31,18 +30,18 @@ const LogTableWrapper = () => (
   <MemoryRouter
     initialEntries={['/nms/mynetwork/gateway/mygateway/logs']}
     initialIndex={0}>
-    <MuiPickersUtilsProvider utils={MomentUtils}>
-      <MuiThemeProvider theme={defaultTheme}>
-        <MuiStylesThemeProvider theme={defaultTheme}>
+    <LocalizationProvider dateAdapter={AdapterDateFns}>
+      <StyledEngineProvider injectFirst>
+        <ThemeProvider theme={defaultTheme}>
           <Routes>
             <Route
               path="/nms/:networkId/gateway/:gatewayId/logs"
               element={<GatewayLogs />}
             />
           </Routes>
-        </MuiStylesThemeProvider>
-      </MuiThemeProvider>
-    </MuiPickersUtilsProvider>
+        </ThemeProvider>
+      </StyledEngineProvider>
+    </LocalizationProvider>
   </MemoryRouter>
 );
 
@@ -124,22 +123,23 @@ describe('<GatewayLogs />', () => {
   ];
   beforeEach(() => {
     mockAPI(MagmaAPI.logs, 'networksNetworkIdLogsCountGet', mockLogCount);
-
     mockAPI(MagmaAPI.logs, 'networksNetworkIdLogsSearchGet', mockLogs);
   });
 
   it('verify gateway logs rendering', async () => {
-    const {getAllByRole} = render(<LogTableWrapper />);
-    await wait();
-    const rowItems = getAllByRole('row');
+    const {findAllByRole} = render(<LogTableWrapper />);
 
-    // can get called multiple times from the histogram component
-    // as well
-    expect(MagmaAPI.logs.networksNetworkIdLogsCountGet).toHaveBeenCalled();
+    await waitFor(() => {
+      // can get called multiple times from the histogram component
+      // as well
+      expect(MagmaAPI.logs.networksNetworkIdLogsCountGet).toHaveBeenCalled();
 
-    expect(MagmaAPI.logs.networksNetworkIdLogsSearchGet).toHaveBeenCalledTimes(
-      1,
-    );
+      expect(
+        MagmaAPI.logs.networksNetworkIdLogsSearchGet,
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    const rowItems = await findAllByRole('row');
 
     // first row is the header
     expect(rowItems[0]).toHaveTextContent('Date');

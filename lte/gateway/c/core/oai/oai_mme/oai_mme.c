@@ -55,17 +55,14 @@
 #if EMBEDDED_SGW
 #include "lte/gateway/c/core/oai/tasks/mme_app/mme_app_embedded_spgw.h"
 #include "lte/gateway/c/core/oai/include/spgw_config.h"
-#include "lte/gateway/c/core/oai/tasks/sgw/sgw_defs.h"
-#include "lte/gateway/c/core/oai/tasks/sgw_s8/sgw_s8_defs.h"
+#include "lte/gateway/c/core/oai/tasks/sgw/sgw_defs.hpp"
+#include "lte/gateway/c/core/oai/tasks/sgw_s8/sgw_s8_defs.hpp"
 #endif
 #include "lte/gateway/c/core/oai/include/udp_primitives_server.h"
 #include "lte/gateway/c/core/oai/include/s11_mme.h"
 #include "lte/gateway/c/core/oai/include/service303.hpp"
 #include "lte/gateway/c/core/oai/common/shared_ts_log.h"
 #include "lte/gateway/c/core/oai/include/grpc_service.hpp"
-#if MME_BENCHMARK
-#include "lte/gateway/c/core/oai/tasks/mme_app/experimental/mme_app_serialization.hpp"
-#endif
 
 static void send_timer_recovery_message(void);
 
@@ -182,14 +179,6 @@ int main(int argc, char* argv[]) {
   if (mme_config.use_stateless) {
     send_timer_recovery_message();
   }
-
-#if MME_BENCHMARK
-  if (mme_config.run_mode == RUN_MODE_TEST) {
-    if (mme_config.test_type == TEST_SERIALIZATION_PROTOBUF) {
-      mme_app_schedule_test_protobuf_serialization(mme_config.test_param);
-    }
-  }
-#endif
 
   /*
    * Handle signals here

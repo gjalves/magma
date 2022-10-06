@@ -11,8 +11,9 @@
  * limitations under the License.
  */
 
-import './common/axiosConfig';
-import './common/polyfill';
+import './util/axiosConfig';
+import './util/chartjsSetup';
+import './util/polyfill';
 
 import Index from './components/host/Index';
 import React from 'react';

@@ -17,7 +17,6 @@
 
 extern "C" {
 #include "lte/gateway/c/core/oai/lib/3gpp/3gpp_36.401.h"
-#include "lte/gateway/c/core/oai/lib/hashtable/hashtable.h"
 #include "lte/gateway/c/core/oai/common/common_types.h"
 #include "lte/gateway/c/core/oai/common/conversions.h"
 #include "lte/gateway/c/core/oai/common/itti_free_defined_msg.h"
@@ -31,7 +30,9 @@ extern "C" {
 namespace magma {
 namespace lte {
 
-extern task_zmq_ctx_t task_zmq_ctx_main_s1ap;
+using oai::S1apUeState;
+using oai::UeDescription;
+task_zmq_ctx_t task_zmq_ctx_main_s1ap;
 
 status_code_e setup_new_association(s1ap_state_t* state,
                                     sctp_assoc_id_t assoc_id) {
@@ -408,12 +409,12 @@ status_code_e send_s1ap_erab_mod_confirm(enb_ue_s1ap_id_t enb_ue_id,
 }
 
 bool is_enb_state_valid(s1ap_state_t* state, sctp_assoc_id_t assoc_id,
-                        mme_s1_enb_state_s expected_state,
+                        oai::S1apEnbState expected_state,
                         uint32_t expected_num_ues) {
-  enb_description_t* enb_associated = nullptr;
+  oai::EnbDescription* enb_associated = nullptr;
   state->enbs.get(assoc_id, &enb_associated);
-  if (enb_associated->nb_ue_associated == expected_num_ues &&
-      enb_associated->s1_state == expected_state) {
+  if (enb_associated->nb_ue_associated() == expected_num_ues &&
+      enb_associated->s1_enb_state() == expected_state) {
     return true;
   }
   return false;
@@ -429,16 +430,20 @@ bool is_num_enbs_valid(s1ap_state_t* state, uint32_t expected_num_enbs) {
 }
 
 bool is_ue_state_valid(sctp_assoc_id_t assoc_id, enb_ue_s1ap_id_t enb_ue_id,
-                       enum s1_ue_state_s expected_ue_state) {
-  ue_description_t* ue = nullptr;
-  hash_table_ts_t* ue_ht = S1apStateManager::getInstance().get_ue_state_ht();
-  uint64_t comp_s1ap_id = S1AP_GENERATE_COMP_S1AP_ID(assoc_id, enb_ue_id);
-  hashtable_rc_t ht_rc = hashtable_ts_get(ue_ht, (const hash_key_t)comp_s1ap_id,
-                                          reinterpret_cast<void**>(&ue));
-  if (ht_rc != HASH_TABLE_OK) {
+                       enum S1apUeState expected_ue_state) {
+  UeDescription* ue = nullptr;
+  map_uint64_ue_description_t* state_ue_map = get_s1ap_ue_state();
+  if (!state_ue_map) {
+    std::cerr << "Failed to get s1ap_ue_state" << std::endl;
     return false;
   }
-  return ue->s1_ue_state == expected_ue_state ? true : false;
+  uint64_t comp_s1ap_id = S1AP_GENERATE_COMP_S1AP_ID(assoc_id, enb_ue_id);
+
+  magma::proto_map_rc_t rc = state_ue_map->get(comp_s1ap_id, &ue);
+  if (rc != magma::PROTO_MAP_OK) {
+    return false;
+  }
+  return ue->s1ap_ue_state() == expected_ue_state ? true : false;
 }
 
 status_code_e simulate_pdu_s1_message(uint8_t* bytes, long bytes_len,

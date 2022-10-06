@@ -11,19 +11,15 @@
  * limitations under the License.
  */
 
-import Dialog from '@material-ui/core/Dialog';
-import DialogContent from '@material-ui/core/DialogContent';
-import DialogTitle from '@material-ui/core/DialogTitle';
-import Link from '@material-ui/core/Link';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Link from '@mui/material/Link';
 import React, {useContext} from 'react';
 import ReactJson from 'react-json-view';
-import SubscriberContext from '../../components/context/SubscriberContext';
-import {
-  LteSubscription,
-  MutableSubscriber,
-  Subscriber,
-} from '../../../generated';
-import {SubscriberRowType} from '../../state/lte/SubscriberState';
+import SubscriberContext from '../../context/SubscriberContext';
+import {MutableSubscriber, Subscriber} from '../../../generated';
+import {SubscriberRowType} from '../../util/SubscriberState';
 import {isValidHex} from '../../util/strings';
 import {useNavigate} from 'react-router-dom';
 import type {
@@ -192,9 +188,9 @@ export type subscriberForbiddenNetworkTypes = {
 
 export type EditSubscriberProps = {
   subscriberState: Subscriber;
-  onSubscriberChange: (
-    key: string,
-    val: string | number | LteSubscription | undefined,
+  onSubscriberChange: <K extends keyof Subscriber>(
+    key: K,
+    val: Subscriber[K],
   ) => void;
   inputClass: string;
   onTrafficPolicyChange: (
@@ -280,7 +276,8 @@ export function RenderLink(props: RenderLinkType) {
       <Link
         variant="body2"
         component="button"
-        onClick={() => navigate(imsi + `${!subscriberConfig ? '/event' : ''}`)}>
+        onClick={() => navigate(imsi + `${!subscriberConfig ? '/event' : ''}`)}
+        underline="hover">
         {imsi}
       </Link>
     </div>

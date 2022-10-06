@@ -3,17 +3,18 @@
 This folder contains container image definitions for AGW services.
 
 The containers need to run on a host that has a patched Open vSwitch installation.
-The script [../agw_install_docker.sh](../agw_install_docker.sh) can configure an Ubuntu machine to act as a
+The script [agw_install_docker.sh](../deploy/agw_install_docker.sh) can configure an Ubuntu machine to act as a
 host system for the containerized AGW.
 
 There are Ansible playbooks that create an EC2 instance and prepare it to act as
 a host for the containerized AGW. Currently the preparation is not complete and
-still requires to run `../agw_install_docker.sh` at the end, see [Deploying the
+still requires to run `agw_install_docker.sh` at the end, see [Deploying the
 containerized AGW on AWS](#deploying-the-containerized-agw-on-aws).
 
 ## Building the images
 
 The images can be built with `cd $MAGMA_ROOT/lte/gateway/docker && docker-compose build`.
+On Arm architecture with 5.4 kernel:The images can be built with `cd $MAGMA_ROOT/lte/gateway/docker && docker-compose build --build-arg CPU_ARCH=aarch64 --build-arg DEB_PORT=arm64`.
 
 ## Deploying the containerized AGW on AWS
 
@@ -37,9 +38,15 @@ The magma VM defined in [../Vagrantfile](../Vagrantfile) can be used to run the
 containerized AGW by running the following steps inside the VM:
 
 ```
-cd $MAGMA_ROOT/lte/gateway && make run  # You can skip this if you have built the AGW with make before
+cd $MAGMA_ROOT/lte/gateway && make build  # You can skip this if you have built the AGW with make before
 for component in redis nghttpx td-agent-bit; do cp "${MAGMA_ROOT}"/{orc8r,lte}/gateway/configs/templates/${component}.conf.template; done
-sudo systemctl stop 'magma@*'  # We don't want the systemd-based AGW to run when we start the containerized AGW
+sed -i 's/init_system: systemd/init_system: docker/' "${MAGMA_ROOT}"/lte/gateway/configs/magmad.yml
+sudo systemctl start magma_dp@envoy
+
+# Optional: If you want to connect to an orc8r, copy the `rootCA.pem` from the orc8r
+# to `/var/opt/magma/certs/rootCA.pem`. For example in a typical magma-dev VM:
+cp ${MAGMA_ROOT}/.cache/test_certs/rootCA.pem /var/opt/magma/certs/
+
 cd $MAGMA_ROOT/lte/gateway/docker
 docker-compose build
 docker-compose up
@@ -50,3 +57,18 @@ on a VM. However we are not there yet as the containerized AGW currently depends
 on a patched Open vSwitch installation on the host machine. The magma VM happens
 to have the right packages installed, and thus can currently be used as a quick
 and dirty way to run the containers locally.
+
+### Running the S1AP integration tests against the containerized AGW
+
+At present, of the S1AP integration tests, it has been verified that `test_attach_detach` can be run versus the containerized AGW.
+To run this test, development mode needs to be enabled when starting the containers, which can be done by using an override
+file `docker-compose.dev.yaml`:
+
+```
+cd $MAGMA_ROOT/lte/gateway/docker
+docker-compose down # If containers are already running
+docker-compose -f docker-compose.yaml -f docker-compose.dev.yaml up
+```
+
+The test VM can then be set up and the test executed by following
+[these instructions](https://docs.magmacore.org/docs/next/lte/s1ap_tests#test-vm-setup).

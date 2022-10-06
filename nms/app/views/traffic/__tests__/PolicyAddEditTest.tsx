@@ -10,16 +10,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import MuiStylesThemeProvider from '@material-ui/styles/ThemeProvider';
-import NetworkContext from '../../../components/context/NetworkContext';
+import NetworkContext from '../../../context/NetworkContext';
 import React from 'react';
 import TrafficDashboard from '../TrafficOverview';
 import defaultTheme from '../../../theme/default';
 import {FEG_LTE, LTE} from '../../../../shared/types/network';
-import {
-  LteNetworkContextProvider,
-  PolicyProvider,
-} from '../../../components/lte/LteContext';
 
 import MagmaAPI from '../../../api/MagmaAPI';
 import {
@@ -27,11 +22,12 @@ import {
   FegLteNetwork,
   NetworkFederationConfigs,
   PolicyRule,
-  RatingGroup,
   RedirectInformation,
 } from '../../../../generated';
+import {LteNetworkContextProvider} from '../../../context/LteNetworkContext';
 import {MemoryRouter, Route, Routes} from 'react-router-dom';
-import {MuiThemeProvider} from '@material-ui/core/styles';
+import {PolicyProvider} from '../../../context/PolicyContext';
+import {StyledEngineProvider, ThemeProvider} from '@mui/material/styles';
 import {fireEvent, render, waitFor} from '@testing-library/react';
 import {mockAPI} from '../../../util/TestUtils';
 import {useEnqueueSnackbar} from '../../../hooks/useSnackbar';
@@ -184,11 +180,7 @@ describe('<TrafficDashboard />', () => {
     mockAPI(MagmaAPI.policies, 'networksNetworkIdPoliciesRulesPost');
     mockAPI(MagmaAPI.policies, 'networksNetworkIdPoliciesRulesRuleIdPut');
     mockAPI(MagmaAPI.policies, 'lteNetworkIdPolicyQosProfilesGet', {});
-    mockAPI(
-      MagmaAPI.ratingGroups,
-      'networksNetworkIdRatingGroupsGet',
-      ({} as unknown) as Array<RatingGroup>,
-    );
+    mockAPI(MagmaAPI.ratingGroups, 'networksNetworkIdRatingGroupsGet', {});
     mockAPI(
       MagmaAPI.policies,
       'networksNetworkIdPoliciesBaseNamesBaseNameGet',
@@ -222,17 +214,15 @@ describe('<TrafficDashboard />', () => {
     <MemoryRouter
       initialEntries={['/nms/test/traffic/policy']}
       initialIndex={0}>
-      <MuiThemeProvider theme={defaultTheme}>
-        <MuiStylesThemeProvider theme={defaultTheme}>
+      <StyledEngineProvider injectFirst>
+        <ThemeProvider theme={defaultTheme}>
           <NetworkContext.Provider
             value={{
               networkId: 'test',
               networkType: networkType,
             }}>
-            <LteNetworkContextProvider
-              networkId={'test'}
-              networkType={networkType}>
-              <PolicyProvider networkId={'test'} networkType={networkType}>
+            <LteNetworkContextProvider networkId={'test'}>
+              <PolicyProvider networkId={'test'}>
                 <Routes>
                   <Route
                     path="/nms/:networkId/traffic/policy/*"
@@ -242,8 +232,8 @@ describe('<TrafficDashboard />', () => {
               </PolicyProvider>
             </LteNetworkContextProvider>
           </NetworkContext.Provider>
-        </MuiStylesThemeProvider>
-      </MuiThemeProvider>
+        </ThemeProvider>
+      </StyledEngineProvider>
     </MemoryRouter>
   );
 
@@ -353,13 +343,11 @@ describe('<TrafficDashboard />', () => {
     if (
       policyID instanceof HTMLInputElement &&
       prio instanceof HTMLInputElement &&
-      networkWide instanceof HTMLElement
+      networkWide instanceof HTMLInputElement
     ) {
       fireEvent.change(policyID, {target: {value: 'test_policy_0'}});
       fireEvent.change(prio, {target: {value: '1'}});
-      if (networkWide.firstChild instanceof HTMLElement) {
-        fireEvent.click(networkWide.firstChild);
-      }
+      fireEvent.click(networkWide);
     } else {
       throw 'invalid type';
     }
@@ -478,13 +466,11 @@ describe('<TrafficDashboard />', () => {
     if (
       policyID instanceof HTMLInputElement &&
       prio instanceof HTMLInputElement &&
-      networkWide instanceof HTMLElement
+      networkWide instanceof HTMLInputElement
     ) {
       fireEvent.change(policyID, {target: {value: 'test_policy_0'}});
       fireEvent.change(prio, {target: {value: '1'}});
-      if (networkWide.firstChild instanceof HTMLElement) {
-        fireEvent.click(networkWide.firstChild);
-      }
+      fireEvent.click(networkWide);
     } else {
       throw 'invalid type';
     }
@@ -523,7 +509,6 @@ describe('<TrafficDashboard />', () => {
   });
 
   it('verify lte policy full add', async () => {
-    jest.setTimeout(30000);
     const networkId = 'test';
     const {queryByTestId, getByTestId, getByText} = render(
       <PolicyWrapper networkType={LTE} />,

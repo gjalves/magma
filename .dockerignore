@@ -1,6 +1,5 @@
 *
 !.cache/test_certs
-!fb/config/
 
 !.devcontainer/
 !third_party/
@@ -29,12 +28,6 @@
 !lte/gateway/deploy
 !lte/gateway/docker/deploy
 
-!devmand/cloud/
-!devmand/gateway/
-!devmand/protos/
-
-!fb/src/dpi/
-
 !orc8r/cloud/configs/
 !orc8r/lib/
 !orc8r/cloud/go/
@@ -60,8 +53,6 @@
 !build/gen
 
 !protos/
-
-!xwf/gateway/
 
 !bazel/
 !*.bzl

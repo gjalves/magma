@@ -15,6 +15,7 @@ import Sequelize from 'sequelize';
 
 import {Organization} from '../shared/sequelize_models';
 import {OrganizationModel} from '../shared/sequelize_models/models/organization';
+import {syncOrganizationWithOrc8rTenant} from '../server/util/tenantsSync';
 import {union} from 'lodash';
 
 type OrganizationObject = {
@@ -31,12 +32,13 @@ async function updateOrganization(
     `Updating organization ${organizationObject.name} to: ` +
       `networkIDs=[${organizationObject.networkIDs.join(' ')}]`,
   );
-  await organization.update({
+  const updated = await organization.update({
     networkIDs: union(
       organization.networkIDs ?? [],
       organizationObject.networkIDs,
     ),
   });
+  await syncOrganizationWithOrc8rTenant(updated);
 }
 
 async function createOrganization(organizationObject: OrganizationObject) {
@@ -44,7 +46,7 @@ async function createOrganization(organizationObject: OrganizationObject) {
     `Creating a new organization: name=${organizationObject.name}, ` +
       `networkIDs=[${organizationObject.networkIDs.join(' ')}]`,
   );
-  await Organization.create({
+  const organization = await Organization.create({
     name: organizationObject.name,
     networkIDs: organizationObject.networkIDs,
     csvCharset: '',
@@ -52,18 +54,17 @@ async function createOrganization(organizationObject: OrganizationObject) {
     ssoEntrypoint: '',
     ssoIssuer: '',
   });
+  await syncOrganizationWithOrc8rTenant(organization);
 }
 
 async function createOrUpdateOrganization(
   organizationObject: OrganizationObject,
 ) {
   const organization = await Organization.findOne({
-    where: {
-      name: Sequelize.where(
-        Sequelize.fn('lower', Sequelize.col('name')),
-        Sequelize.fn('lower', organizationObject.name),
-      ),
-    },
+    where: Sequelize.where(
+      Sequelize.fn('lower', Sequelize.col('name')),
+      Sequelize.fn('lower', organizationObject.name),
+    ),
   });
   if (!organization) {
     await Promise.all([createOrganization(organizationObject)]);
@@ -76,7 +77,7 @@ function main() {
   const args = process.argv.slice(2);
   if (args.length < 1) {
     console.log(
-      'Usage: createOrganization.js <name> <networkID>,<networkID>, ...',
+      'Usage: createOrganization.ts <name> <networkID>,<networkID>, ...',
     );
     process.exit(1);
   }
@@ -87,6 +88,7 @@ function main() {
     networkIDs,
     csvCharset: '',
   } as const;
+
   createOrUpdateOrganization(organizationObject)
     .then(() => {
       console.log('Success');

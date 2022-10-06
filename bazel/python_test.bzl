@@ -34,13 +34,14 @@ from bazel.python_utils.coverage_decorator import coverage_decorator
 
 if __name__ == "__main__":
     with coverage_decorator():
-        args =  ["-ra", "-vv"]  + %s + sys.argv[1:] + %s
+        args =  ["-s", "-vv"]  + %s + sys.argv[1:] + %s
         sys.exit(pytest.main(args))"""
 
 PYTEST_DEPS = [
     requirement("pytest"),
     requirement("pytest-cov"),
     requirement("coverage-lcov"),
+    requirement("flaky"),
 ]
 
 def _stringify(paths):

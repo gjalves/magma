@@ -15,38 +15,39 @@ import type {CwfGateway, CwfHaPair} from '../../../generated';
 import type {WithAlert} from '../Alert/withAlert';
 
 import AddGatewayDialog from '../AddGatewayDialog';
-import Button from '@material-ui/core/Button';
+import Button from '@mui/material/Button';
 import CWFEditGatewayDialog from './CWFEditGatewayDialog';
-import ChevronRight from '@material-ui/icons/ChevronRight';
-import DeleteIcon from '@material-ui/icons/Delete';
+import ChevronRight from '@mui/icons-material/ChevronRight';
+import DeleteIcon from '@mui/icons-material/Delete';
 import DeviceStatusCircle from '../../theme/design-system/DeviceStatusCircle';
-import EditIcon from '@material-ui/icons/Edit';
-import ExpandMore from '@material-ui/icons/ExpandMore';
-import IconButton from '@material-ui/core/IconButton';
-import NestedRouteLink from '../NestedRouteLink';
-import Paper from '@material-ui/core/Paper';
-import React from 'react';
-import StarIcon from '@material-ui/icons/Star';
-import Table from '@material-ui/core/Table';
-import TableBody from '@material-ui/core/TableBody';
-import TableCell from '@material-ui/core/TableCell';
-import TableHead from '@material-ui/core/TableHead';
-import TableRow from '@material-ui/core/TableRow';
-import Tooltip from '@material-ui/core/Tooltip';
-
+import EditIcon from '@mui/icons-material/Edit';
+import ExpandMore from '@mui/icons-material/ExpandMore';
+import IconButton from '@mui/material/IconButton';
 import LoadingFiller from '../LoadingFiller';
 import MagmaAPI from '../../api/MagmaAPI';
+import NestedRouteLink from '../NestedRouteLink';
+import Paper from '@mui/material/Paper';
+import React from 'react';
+import StarIcon from '@mui/icons-material/Star';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import Text from '../../theme/design-system/Text';
+import Tooltip from '@mui/material/Tooltip';
+import TopBar from '../../components/TopBar';
 import nullthrows from '../../../shared/util/nullthrows';
 import useMagmaAPI from '../../api/useMagmaAPI';
 import withAlert from '../Alert/withAlert';
+
 import {GatewayId} from '../../../shared/types/network';
 import {MAGMAD_DEFAULT_CONFIGS} from '../AddGatewayDialog';
 import {Route, Routes, useNavigate, useParams} from 'react-router-dom';
-import {Theme} from '@material-ui/core/styles';
+import {Theme} from '@mui/material/styles';
 import {colors} from '../../theme/default';
 import {findIndex} from 'lodash';
-import {makeStyles} from '@material-ui/styles';
+import {makeStyles} from '@mui/styles';
 import {map} from 'lodash';
 import {useCallback, useState} from 'react';
 import {useInterval} from '../../hooks';
@@ -246,43 +247,48 @@ export function CWFGateways(props: WithAlert) {
   ));
 
   return (
-    <div className={classes.paper}>
-      <div className={classes.header}>
-        <Text variant="h5">Configure Gateways</Text>
-        <NestedRouteLink to="new">
-          <Button variant="contained" color="primary">
-            Add Gateway
-          </Button>
-        </NestedRouteLink>
+    <>
+      <TopBar header="Gateways" tabs={[]} />
+      <div className={classes.paper}>
+        <div className={classes.header}>
+          <Text variant="h5">Configure Gateways</Text>
+          <NestedRouteLink to="new">
+            <Button variant="contained" color="primary">
+              Add Gateway
+            </Button>
+          </NestedRouteLink>
+        </div>
+        <Paper elevation={2}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Name</TableCell>
+                <TableCell>Hardware UUID / GRE Key</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>{rows}</TableBody>
+          </Table>
+        </Paper>
+        <Routes>
+          <Route
+            path="/new"
+            element={
+              <AddGatewayDialog
+                onClose={() => navigate('')}
+                onSave={addGateway}
+              />
+            }
+          />
+          <Route
+            path="/edit/:gatewayID"
+            element={
+              <EditDialog gateways={gateways} setGateways={setGateways} />
+            }
+          />
+        </Routes>
       </div>
-      <Paper elevation={2}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Hardware UUID / GRE Key</TableCell>
-              <TableCell />
-            </TableRow>
-          </TableHead>
-          <TableBody>{rows}</TableBody>
-        </Table>
-      </Paper>
-      <Routes>
-        <Route
-          path="/new"
-          element={
-            <AddGatewayDialog
-              onClose={() => navigate('')}
-              onSave={addGateway}
-            />
-          }
-        />
-        <Route
-          path="/edit/:gatewayID"
-          element={<EditDialog gateways={gateways} setGateways={setGateways} />}
-        />
-      </Routes>
-    </div>
+    </>
   );
 }
 
@@ -330,7 +336,8 @@ function GatewayRow(props: {
                   ? newExpanded.delete(gateway.id)
                   : newExpanded.add(gateway.id);
                 setExpanded(newExpanded);
-              }}>
+              }}
+              size="large">
               {expanded.has(gateway.id) ? <ExpandMore /> : <ChevronRight />}
             </IconButton>
 
@@ -351,10 +358,14 @@ function GatewayRow(props: {
         <TableCell>
           <IconButton
             color="primary"
-            onClick={() => navigate(`edit/${gateway.id}`)}>
+            onClick={() => navigate(`edit/${gateway.id}`)}
+            size="large">
             <EditIcon />
           </IconButton>
-          <IconButton color="primary" onClick={() => onDelete(gateway)}>
+          <IconButton
+            color="primary"
+            onClick={() => onDelete(gateway)}
+            size="large">
             <DeleteIcon />
           </IconButton>
         </TableCell>
